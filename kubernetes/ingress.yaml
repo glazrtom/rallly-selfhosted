@@ -6,23 +6,25 @@ metadata:
   annotations:
     # Example for cert-manager (uncomment if using)
     # cert-manager.io/cluster-issuer: letsencrypt-prod
-    
+
     # Example for NGINX ingress controller size limit
     # nginx.ingress.kubernetes.io/proxy-body-size: "10m"
 spec:
+  # NOTE: Explicitly set to 'nginx'. Remove this line if using a different Ingress Controller
+  # or if you wish to use the cluster default.
   ingressClassName: nginx
   rules:
-  - host: rallly.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: rallly
-            port:
-              number: 80
+    - host: rallly.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rallly
+                port:
+                  number: 80
   tls:
-  - hosts:
-    - rallly.example.com
-    secretName: rallly-tls
+    - hosts:
+        - rallly.example.com
+      secretName: rallly-tls

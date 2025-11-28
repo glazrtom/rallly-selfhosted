@@ -1,4 +1,3 @@
-# kubernetes/postgres.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -33,7 +32,8 @@ spec:
         runAsUser: 999
       containers:
         - name: postgres
-          image: postgres:15-alpine
+          # Switched to 14-alpine to align with official docker-compose
+          image: postgres:14-alpine
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -52,6 +52,9 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               value: rallly
+            # Fix: Point PGDATA to a generic subpath to avoid mount errors (lost+found)
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
               name: postgres
@@ -61,7 +64,8 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - pg_isready -U rallly
+                # Uses env var and adds timeout to prevent hanging
+                - pg_isready -U $POSTGRES_USER -t 5
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
@@ -69,7 +73,8 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - pg_isready -U rallly
+                # Uses env var and adds timeout to prevent hanging
+                - pg_isready -U $POSTGRES_USER -t 5
             initialDelaySeconds: 10
             periodSeconds: 5
           volumeMounts:
@@ -89,5 +94,4 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            # Note: Adjust storage size based on your data retention needs.
             storage: 1Gi

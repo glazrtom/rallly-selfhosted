@@ -1,4 +1,3 @@
-# kubernetes/rallly.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -38,7 +37,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: rallly
-          # Pinned version for stability (latest stable at time of refactoring)
+          # Pinned version for stability and reproducibility
           image: lukevella/rallly:v4.5.4
           imagePullPolicy: IfNotPresent
           ports:
@@ -87,7 +86,6 @@ spec:
                 configMapKeyRef:
                   name: rallly-config
                   key: SMTP_SECURE
-
             # 2. Secrets (from Secret)
             - name: DATABASE_URL
               valueFrom:
@@ -104,19 +102,6 @@ spec:
                 secretKeyRef:
                   name: rallly-secrets
                   key: INITIAL_ADMIN_EMAIL
-
-            # SMTP User/Password (optional usage)
-            # - name: SMTP_USER
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: rallly-secrets
-            #       key: SMTP_USER
-            # - name: SMTP_PASSWORD
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: rallly-secrets
-            #       key: SMTP_PASSWORD
-
           resources:
             limits:
               cpu: "1"
@@ -135,5 +120,6 @@ spec:
             httpGet:
               path: /
               port: 3000
-            initialDelaySeconds: 30
+            # Reduced delay so the pod becomes ready faster once running
+            initialDelaySeconds: 10
             periodSeconds: 5
