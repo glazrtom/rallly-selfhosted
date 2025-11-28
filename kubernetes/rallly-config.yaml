@@ -10,7 +10,10 @@ data:
   NEXT_PUBLIC_BASE_URL: "https://rallly.example.com"
 
   # Email Settings
+  # Note: This is distinct from INITIAL_ADMIN_EMAIL (defined in secrets), which creates the admin account.
+  # SUPPORT_EMAIL is the user-facing support contact shown to users.
   SUPPORT_EMAIL: "admin@example.com"
+
   EMAIL_LOGIN_ENABLED: "true"
   # SECURITY: This allows ANY email to register. Restrict to "*@example.com" or specific emails for production.
   ALLOWED_EMAILS: "*"

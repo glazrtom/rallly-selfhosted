@@ -28,3 +28,7 @@ spec:
     - hosts:
         - rallly.example.com
       secretName: rallly-tls
+      # Note: This Secret must be created separately. Options:
+      # 1. Use cert-manager (uncomment annotation above) to auto-provision
+      # 2. Manually create: kubectl create secret tls rallly-tls --cert=path/to/cert --key=path/to/key
+      # 3. Use an existing cluster-issued certificate secret

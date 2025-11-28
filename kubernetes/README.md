@@ -13,7 +13,7 @@ This directory contains base Kubernetes manifests to self-host Rallly. It separa
 1.  **Secrets (`secrets.yaml`):**
     - **Important:** Do not commit the `secrets.yaml` file with real credentials to version control.
     - Update `POSTGRES_PASSWORD` and `SECRET_PASSWORD` (use `openssl rand -hex 32` to generate).
-    - Update `DATABASE_URL` to match your postgres password.
+    - **Critical:** Ensure the password in `DATABASE_URL` matches `POSTGRES_PASSWORD`. Both must use the same value.
 
 2.  **Config (`rallly-config.yaml`):**
     - Update `NEXT_PUBLIC_BASE_URL` to match your domain.
@@ -22,6 +22,7 @@ This directory contains base Kubernetes manifests to self-host Rallly. It separa
 3.  **Ingress (`ingress.yaml`):**
     - Change `host: rallly.example.com` to your actual domain.
     - Ensure `ingressClassName` matches your cluster's controller (default is set to `nginx`).
+    - **TLS:** Create the TLS certificate Secret named `rallly-tls` or enable cert-manager (see comments in `ingress.yaml` for options).
 
 ## Deployment Order
 
@@ -40,7 +41,18 @@ kubectl apply -f rallly.yaml
 
 # 4. Apply Ingress
 kubectl apply -f ingress.yaml
+```
 
-# 5. Check that the pods are running - should show '1/1 Running' for each pod.
+## Verification
+
+Check that the pods are running:
+
+```bash
 kubectl get pods
 ```
+
+The Postgres pod should show `1/1 Running` and the Rallly pod should eventually show `1/1 Running` once the liveness probe passes.
+
+## Notes on Storage
+
+The PostgreSQL StatefulSet requests a 1Gi PersistentVolume. Ensure your cluster has a default StorageClass configured, or update the `volumeClaimTemplates` in `postgres.yaml` to specify a StorageClass.

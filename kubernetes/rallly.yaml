@@ -26,6 +26,10 @@ spec:
       app: rallly
   strategy:
     type: RollingUpdate
+    # Zero-donwtime deployment strategy
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   template:
     metadata:
       labels:
