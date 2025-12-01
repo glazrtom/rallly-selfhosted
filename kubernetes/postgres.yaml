@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  serviceName: "postgres"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      securityContext:
+        # Run as standard Postgres user (UID 999)
+        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+      containers:
+        - name: postgres
+          # Switched to 14-alpine to align with official docker-compose
+          image: postgres:14-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rallly-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rallly-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: rallly
+            # Fix: Point PGDATA to a generic subpath to avoid mount errors (lost+found)
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          # Health Probes
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                # Uses env var and adds timeout to prevent hanging
+                - pg_isready -U $POSTGRES_USER -t 5
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                # Uses env var and adds timeout to prevent hanging
+                - pg_isready -U $POSTGRES_USER -t 5
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

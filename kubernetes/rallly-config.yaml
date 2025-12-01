@@ -1,0 +1,24 @@
+# kubernetes/rallly-config.yaml
+# Stores all non-secret configuration variables.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rallly-config
+  namespace: default
+data:
+  # Base URL for the application (must match Ingress host)
+  NEXT_PUBLIC_BASE_URL: "https://rallly.example.com"
+
+  # Email Settings
+  # Note: This is distinct from INITIAL_ADMIN_EMAIL (defined in secrets), which creates the admin account.
+  # SUPPORT_EMAIL is the user-facing support contact shown to users.
+  SUPPORT_EMAIL: "admin@example.com"
+
+  EMAIL_LOGIN_ENABLED: "true"
+  # SECURITY: This allows ANY email to register. Restrict to "*@example.com" or specific emails for production.
+  ALLOWED_EMAILS: "*"
+
+  # SMTP Settings (Credentials will be in the Secret file)
+  SMTP_HOST: "smtp.example.com"
+  SMTP_PORT: "587"
+  SMTP_SECURE: "false"

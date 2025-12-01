@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rallly
+  namespace: default
+spec:
+  selector:
+    app: rallly
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rallly
+  namespace: default
+  labels:
+    app: rallly
+spec:
+  # Note: For production, use replicas: 2 or more with a PodDisruptionBudget for HA.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rallly
+  strategy:
+    type: RollingUpdate
+    # Zero-downtime deployment strategy
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: rallly
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: rallly
+          # Pinned version for stability and reproducibility
+          image: lukevella/rallly:v4.5.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            # 1. Configuration (from ConfigMap)
+            - name: NEXT_PUBLIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rallly-config
+                  key: NEXT_PUBLIC_BASE_URL
+            - name: SUPPORT_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: rallly-config
+                  key: SUPPORT_EMAIL
+            - name: ALLOWED_EMAILS
+              valueFrom:
+                configMapKeyRef:
+                  name: rallly-config
+                  key: ALLOWED_EMAILS
+            - name: EMAIL_LOGIN_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: rallly-config
+                  key: EMAIL_LOGIN_ENABLED
+            - name: SMTP_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: rallly-config
+                  key: SMTP_HOST
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: rallly-config
+                  key: SMTP_PORT
+            - name: SMTP_SECURE
+              valueFrom:
+                configMapKeyRef:
+                  name: rallly-config
+                  key: SMTP_SECURE
+            # 2. Secrets (from Secret)
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: rallly-secrets
+                  key: DATABASE_URL
+            - name: SECRET_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rallly-secrets
+                  key: SECRET_PASSWORD
+            - name: INITIAL_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: rallly-secrets
+                  key: INITIAL_ADMIN_EMAIL
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            # Reduced delay so the pod becomes ready faster once running
+            initialDelaySeconds: 10
+            periodSeconds: 5
