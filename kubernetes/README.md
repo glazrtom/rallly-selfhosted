@@ -23,7 +23,9 @@ This directory contains base Kubernetes manifests to self-host Rallly. It separa
 3. **Ingress (`ingress.yaml`):**
    - Change `host: rallly.example.com` to your actual domain.
    - Ensure `ingressClassName` matches your cluster's controller (default is set to `nginx`).
-   - **TLS:** Create the TLS certificate Secret named `rallly-tls` or enable cert-manager (see comments in `ingress.yaml` for options).
+   - **TLS:**
+     - **Option 1 (Manual):** Create a TLS Secret: `kubectl create secret tls rallly-tls --cert=path/to/cert --key=path/to/key`
+     - **Option 2 (cert-manager):** See comments in `ingress.yaml` for automatic certificate provisioning setup.
 
 ## Deployment Order
 
@@ -55,6 +57,8 @@ kubectl rollout restart deployment rallly
 
 This performs a **rolling restart**, so there will be no downtime. However, ensure the new configuration is valid; if pods fail to start, check the logs with `kubectl logs -f deployment/rallly`.
 
+**Note:** This assumes your Deployment has multiple replicas. If running a single Rallly instance (1 replica), there will be brief downtime during the restart.
+
 ## Verification
 
 Check that the pods are running:
@@ -68,6 +72,8 @@ The Postgres pod should show `1/1 Running` and the Rallly pod should eventually 
 ## Notes on Storage
 
 The PostgreSQL StatefulSet requests a 1Gi PersistentVolume. Ensure your cluster has a default StorageClass configured, or update the `volumeClaimTemplates` in `postgres.yaml` to specify a StorageClass. If no StorageClass is available, the PersistentVolumeClaim will remain pending and the postgres pod will not start. Check your cluster's available StorageClasses with `kubectl get storageclass`.
+
+**Quick check:** Run `kubectl get storageclass` before deployment. If the output is empty, ask your cluster administrator to configure a default StorageClass, or update `postgres.yaml` to reference an existing one.
 
 ## Notes on Backups
 
