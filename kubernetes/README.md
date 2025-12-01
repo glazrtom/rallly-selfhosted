@@ -11,7 +11,7 @@ This directory contains base Kubernetes manifests to self-host Rallly. It separa
 ## Configuration
 
 1. **Secrets (`secrets.yaml`):**
-   - **Important:** Do not commit the `secrets.yaml` file with real credentials to version control.
+   - **Important:** Do not commit the `secrets.yaml` file with real credentials to version control. Consider adding `secrets.yaml` to your `.gitignore` file to prevent accidental commits.
    - Update `POSTGRES_PASSWORD` and `SECRET_PASSWORD` (use `openssl rand -hex 32` to generate).
    - **Critical:** Ensure the password in `DATABASE_URL` matches `POSTGRES_PASSWORD`. Both must use the same value.
    - **Format:** The `DATABASE_URL` format should look like this: `postgres://<user>:<password>@<postgres-service-name>:5432/<db-name>`.
