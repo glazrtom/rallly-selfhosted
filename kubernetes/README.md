@@ -14,6 +14,7 @@ This directory contains base Kubernetes manifests to self-host Rallly. It separa
     - **Important:** Do not commit the `secrets.yaml` file with real credentials to version control.
     - Update `POSTGRES_PASSWORD` and `SECRET_PASSWORD` (use `openssl rand -hex 32` to generate).
     - **Critical:** Ensure the password in `DATABASE_URL` matches `POSTGRES_PASSWORD`. Both must use the same value.
+    - **Format:** The `DATABASE_URL` format should look like this: `postgres://<user>:<password>@<postgres-service-name>:5432/<db-name>`.
 
 2.  **Config (`rallly-config.yaml`):**
     - Update `NEXT_PUBLIC_BASE_URL` to match your domain.
@@ -41,6 +42,12 @@ kubectl apply -f rallly.yaml
 
 # 4. Apply Ingress
 kubectl apply -f ingress.yaml
+```
+
+**Note:** If you update `secrets.yaml` or `rallly-config.yaml` _after_ deployment, you must restart the Rallly pods for changes to take effect:
+
+```bash
+kubectl rollout restart deployment rallly
 ```
 
 ## Verification
