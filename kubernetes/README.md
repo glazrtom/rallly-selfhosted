@@ -37,6 +37,9 @@ kubectl apply -f rallly-config.yaml
 # 2. Apply Database (StatefulSet)
 kubectl apply -f postgres.yaml
 
+# Wait for database to be ready
+kubectl wait --for=condition=ready pod -l app=postgres --timeout=300s
+
 # 3. Apply Application (Deployment)
 kubectl apply -f rallly.yaml
 
@@ -65,3 +68,13 @@ The Postgres pod should show `1/1 Running` and the Rallly pod should eventually 
 ## Notes on Storage
 
 The PostgreSQL StatefulSet requests a 1Gi PersistentVolume. Ensure your cluster has a default StorageClass configured, or update the `volumeClaimTemplates` in `postgres.yaml` to specify a StorageClass. If no StorageClass is available, the PersistentVolumeClaim will remain pending and the postgres pod will not start. Check your cluster's available StorageClasses with `kubectl get storageclass`.
+
+## Notes on Backups
+
+For production deployments, implement regular PostgreSQL backups. Consider using:
+
+- Kubernetes-native backup tools (e.g., Velero)
+- Scheduled pg_dump jobs within the cluster
+- Cloud-provider managed backups (if using managed K8s)
+
+Refer to your cluster provider's backup documentation for recommendations.
