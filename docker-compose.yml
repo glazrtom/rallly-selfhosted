@@ -1,30 +1,163 @@
 services:
-  rallly_db:
+  # ── Reverse Proxy ─────────────────────────────────────────────
+  traefik:
+    image: traefik:v3.3
+    restart: always
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
+    environment:
+      - DOCKER_API_VERSION=1.40
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme-data:/acme
+
+  # ── Application ───────────────────────────────────────────────
+  rallly:
+    image: ${RALLLY_IMAGE:-lukevella/rallly:4}
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      serverless-redis-http:
+        condition: service_started
+      garage:
+        condition: service_healthy
+    environment:
+      - NEXT_PUBLIC_BASE_URL=https://${DOMAIN}
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/rallly
+      - SECRET_PASSWORD=${SECRET_PASSWORD}
+      # Email
+      - SUPPORT_EMAIL=${SUPPORT_EMAIL}
+      - NOREPLY_EMAIL=${NOREPLY_EMAIL:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_SECURE=${SMTP_SECURE:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PWD=${SMTP_PWD:-}
+      # Access control
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS:-}
+      - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-}
+      # Object storage (internal)
+      - S3_ENDPOINT=http://garage:3900
+      - S3_BUCKET_NAME=rallly
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+      - S3_REGION=garage
+      - NEXT_PUBLIC_CDN_BASE_URL=https://${DOMAIN}/s3/rallly
+      # KV store (internal)
+      - KV_REST_API_URL=http://serverless-redis-http:80
+      - KV_REST_API_TOKEN=${KV_TOKEN}
+      # OIDC (optional)
+      - OIDC_NAME=${OIDC_NAME:-}
+      - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rallly.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.rallly.entrypoints=websecure"
+      - "traefik.http.routers.rallly.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rallly.loadbalancer.server.port=3000"
+
+  # ── Database ──────────────────────────────────────────────────
+  db:
     image: postgres:14.2
     restart: always
     volumes:
       - db-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=db
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=rallly
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  rallly:
-    image: lukevella/rallly:latest
+  # ── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  serverless-redis-http:
+    image: hiett/serverless-redis-http:latest
     restart: always
     depends_on:
-      - rallly_db
-    ports:
-      - 3000:3000
+      redis:
+        condition: service_healthy
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@rallly_db/db
-    env_file:
-      - config.env
+      SRH_MODE: env
+      SRH_TOKEN: ${KV_TOKEN}
+      SRH_CONNECTION_STRING: "redis://redis:6379"
+
+  # ── Object Storage ───────────────────────────────────────────
+  garage:
+    image: dxflrs/garage:v2.3.0
+    restart: always
+    volumes:
+      - ./config/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    environment:
+      - GARAGE_DEFAULT_ACCESS_KEY=${S3_ACCESS_KEY_ID}
+      - GARAGE_DEFAULT_SECRET_KEY=${S3_SECRET_ACCESS_KEY}
+      - GARAGE_DEFAULT_BUCKET=rallly
+    command: /garage server --single-node --default-bucket
+    healthcheck:
+      test: ["CMD", "/garage", "stats", "-a"]
+      interval: 1h
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 5s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.garage.rule=Host(`${DOMAIN}`) && PathPrefix(`/s3`)"
+      - "traefik.http.routers.garage.entrypoints=websecure"
+      - "traefik.http.routers.garage.tls.certresolver=letsencrypt"
+      - "traefik.http.middlewares.garage-strip.stripprefix.prefixes=/s3"
+      - "traefik.http.routers.garage.middlewares=garage-strip"
+      - "traefik.http.services.garage.loadbalancer.server.port=3900"
+
+  garage_init:
+    image: amazon/aws-cli
+    depends_on:
+      garage:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=garage
+    volumes:
+      - ./config/cors.json:/cors.json:ro
+    entrypoint:
+      - sh
+      - -c
+      - "aws --endpoint-url http://garage:3900 s3api put-bucket-cors --bucket rallly --cors-configuration file:///cors.json"
+    restart: "no"
 
 volumes:
   db-data:
-    driver: local
+  redis-data:
+  garage-meta:
+  garage-data:
+  acme-data:
