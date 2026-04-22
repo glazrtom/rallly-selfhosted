@@ -167,6 +167,14 @@ cmd_restart() {
 
 cmd_update() {
   check_docker
+  # Update repo files if this is a git clone
+  if [ -d "$SCRIPT_DIR/.git" ]; then
+    echo "Updating configuration files..."
+    git -C "$SCRIPT_DIR" pull --ff-only || {
+      error "Could not update repo files. You may need to run: git -C $SCRIPT_DIR pull manually."
+    }
+    echo ""
+  fi
   echo "Pulling latest images..."
   docker compose -f "$COMPOSE_FILE" pull
   echo ""
