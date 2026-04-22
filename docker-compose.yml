@@ -39,13 +39,12 @@ services:
     environment:
       - NEXT_PUBLIC_BASE_URL=https://${DOMAIN}
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/rallly
-      # Object storage (public URL so pre-signed upload URLs work from the browser)
-      - S3_ENDPOINT=https://${DOMAIN}/s3
+      # Object storage (internal — uploads proxy through the app)
+      - S3_ENDPOINT=http://garage:3900
       - S3_BUCKET_NAME=rallly
       - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
       - S3_REGION=garage
-      - NEXT_PUBLIC_CDN_BASE_URL=https://${DOMAIN}/s3/rallly
       # KV store (internal)
       - KV_REST_API_URL=http://serverless-redis-http:80
       - KV_REST_API_TOKEN=${KV_TOKEN}
@@ -114,30 +113,6 @@ services:
       retries: 3
       start_period: 10s
       start_interval: 5s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.garage.rule=Host(`${DOMAIN}`) && PathPrefix(`/s3`)"
-      - "traefik.http.routers.garage.entrypoints=websecure"
-      - "traefik.http.routers.garage.tls.certresolver=letsencrypt"
-      - "traefik.http.middlewares.garage-strip.stripprefix.prefixes=/s3"
-      - "traefik.http.routers.garage.middlewares=garage-strip"
-      - "traefik.http.services.garage.loadbalancer.server.port=3900"
-
-  garage_init:
-    image: amazon/aws-cli
-    depends_on:
-      garage:
-        condition: service_healthy
-    environment:
-      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=garage
-    volumes:
-      - ./config/cors.json:/cors.json:ro
-    entrypoint:
-      - sh
-      - -c
-      - "aws --endpoint-url http://garage:3900 s3api put-bucket-cors --bucket rallly --cors-configuration file:///cors.json"
     restart: "no"
 
 volumes:

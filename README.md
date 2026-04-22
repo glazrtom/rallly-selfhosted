@@ -42,6 +42,8 @@ The `setup` command walks you through configuration and generates secure secrets
 
 All configuration lives in the `.env` file. See [`.env.example`](.env.example) for a fully documented template.
 
+> **Note:** Only modify `.env` for configuration. Editing other files (e.g. `docker-compose.yml`, `rallly.sh`) may cause conflicts when updating with `./rallly.sh update`.
+
 ### Required
 
 | Variable | Description |
