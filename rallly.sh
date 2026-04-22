@@ -126,12 +126,11 @@ cmd_setup() {
   echo ""
   info "Generating secrets..."
 
-  local secret_password postgres_password s3_access_key s3_secret_key kv_token
+  local secret_password postgres_password s3_access_key s3_secret_key
   secret_password="$(generate_secret 32)"
   postgres_password="$(generate_secret 24)"
   s3_access_key="$(generate_secret 16)"
   s3_secret_key="$(generate_secret 32)"
-  kv_token="$(generate_secret 32)"
 
   cat > "$ENV_FILE" <<ENVEOF
 # Rallly Self-Hosted Configuration
@@ -157,7 +156,6 @@ SMTP_PWD=$SMTP_PWD
 POSTGRES_PASSWORD=$postgres_password
 S3_ACCESS_KEY_ID=$s3_access_key
 S3_SECRET_ACCESS_KEY=$s3_secret_key
-KV_TOKEN=$kv_token
 ENVEOF
 
   chmod 600 "$ENV_FILE"
@@ -264,7 +262,7 @@ Commands:
   backup         Back up the database to ./backups/
   help           Show this help message
 
-Services: traefik, web, db, redis, serverless-redis-http, garage
+Services: traefik, web, db, garage
 EOF
 }
 

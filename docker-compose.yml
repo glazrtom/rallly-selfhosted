@@ -27,9 +27,6 @@ services:
   web:
     image: ${RALLLY_IMAGE:-lukevella/rallly:4}
     restart: always
-    depends_on:
-      serverless-redis-http:
-        condition: service_started
     env_file:
       - .env
     environment:
@@ -46,9 +43,6 @@ services:
       - S3_REGION=${S3_REGION:-garage}
       - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
-      # KV store (internal)
-      - KV_REST_API_URL=http://serverless-redis-http:80
-      - KV_REST_API_TOKEN=${KV_TOKEN}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
@@ -74,29 +68,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  # ── Redis ─────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    restart: always
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  serverless-redis-http:
-    image: hiett/serverless-redis-http:latest
-    restart: always
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      SRH_MODE: env
-      SRH_TOKEN: ${KV_TOKEN}
-      SRH_CONNECTION_STRING: "redis://redis:6379"
 
   # ── Object Storage (bundled) ─────────────────────────────────
   # Only started when the `bundled-storage` profile is active.
@@ -125,7 +96,6 @@ services:
 
 volumes:
   db-data:
-  redis-data:
   garage-meta:
   garage-data:
   acme-data:
