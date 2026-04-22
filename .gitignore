@@ -1,4 +1,4 @@
 .env
-acme.json
 backups/
-db-data/
+.DS_Store
+.claude/
