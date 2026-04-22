@@ -24,7 +24,7 @@ services:
       - acme-data:/acme
 
   # ── Application ───────────────────────────────────────────────
-  rallly:
+  web:
     image: ${RALLLY_IMAGE:-lukevella/rallly:4}
     restart: always
     depends_on:
@@ -51,10 +51,10 @@ services:
       - KV_REST_API_TOKEN=${KV_TOKEN}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.rallly.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.rallly.entrypoints=websecure"
-      - "traefik.http.routers.rallly.tls.certresolver=letsencrypt"
-      - "traefik.http.services.rallly.loadbalancer.server.port=3000"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
 
   # ── Database (bundled) ────────────────────────────────────────
   # Only started when the `bundled-db` profile is active.

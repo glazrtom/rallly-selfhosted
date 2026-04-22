@@ -264,7 +264,7 @@ Commands:
   backup         Back up the database to ./backups/
   help           Show this help message
 
-Services: traefik, rallly, db, redis, serverless-redis-http, garage
+Services: traefik, web, db, redis, serverless-redis-http, garage
 EOF
 }
 

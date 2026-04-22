@@ -93,7 +93,7 @@ Use `rallly.sh` to manage your instance:
 ./rallly.sh restart        # Restart all services
 ./rallly.sh update         # Pull latest images and restart
 ./rallly.sh logs           # Stream all logs
-./rallly.sh logs rallly    # Stream logs for a specific service
+./rallly.sh logs web       # Stream logs for a specific service
 ./rallly.sh status         # Show service status
 ./rallly.sh backup         # Back up the database to ./backups/
 ```
@@ -170,7 +170,7 @@ Another service (nginx, apache, etc.) is using those ports. Stop the conflicting
 
 Check the logs for the failing service:
 ```bash
-./rallly.sh logs rallly
+./rallly.sh logs web
 ./rallly.sh logs db
 ```
 
