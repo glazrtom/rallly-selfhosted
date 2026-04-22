@@ -34,21 +34,11 @@ services:
         condition: service_started
       garage:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       - NEXT_PUBLIC_BASE_URL=https://${DOMAIN}
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/rallly
-      - SECRET_PASSWORD=${SECRET_PASSWORD}
-      # Email
-      - SUPPORT_EMAIL=${SUPPORT_EMAIL}
-      - NOREPLY_EMAIL=${NOREPLY_EMAIL:-}
-      - SMTP_HOST=${SMTP_HOST:-}
-      - SMTP_PORT=${SMTP_PORT:-}
-      - SMTP_SECURE=${SMTP_SECURE:-}
-      - SMTP_USER=${SMTP_USER:-}
-      - SMTP_PWD=${SMTP_PWD:-}
-      # Access control
-      - ALLOWED_EMAILS=${ALLOWED_EMAILS:-}
-      - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-}
       # Object storage (internal)
       - S3_ENDPOINT=http://garage:3900
       - S3_BUCKET_NAME=rallly
@@ -59,11 +49,6 @@ services:
       # KV store (internal)
       - KV_REST_API_URL=http://serverless-redis-http:80
       - KV_REST_API_TOKEN=${KV_TOKEN}
-      # OIDC (optional)
-      - OIDC_NAME=${OIDC_NAME:-}
-      - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL:-}
-      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
-      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.rallly.rule=Host(`${DOMAIN}`)"
