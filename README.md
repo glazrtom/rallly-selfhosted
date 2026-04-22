@@ -55,7 +55,6 @@ All configuration lives in the `.env` file. See [`.env.example`](.env.example) f
 | `SUPPORT_EMAIL` | Email shown to users for support |
 | `SMTP_HOST` | SMTP server host |
 | `SMTP_PORT` | SMTP server port (default: `587`) |
-| `SMTP_SECURE` | Use SSL/TLS for SMTP (default: `true`) |
 | `SMTP_USER` | SMTP username |
 | `SMTP_PWD` | SMTP password |
 
@@ -64,6 +63,7 @@ All configuration lives in the `.env` file. See [`.env.example`](.env.example) f
 | Variable | Description |
 |---|---|
 | `NOREPLY_EMAIL` | Sender address for system emails (defaults to `SUPPORT_EMAIL`) |
+| `SMTP_SECURE` | `true` for implicit TLS (port 465), `false` for STARTTLS (587, default) or plain (25, 2525) |
 | `ALLOWED_EMAILS` | Comma-separated allow list, supports wildcards (e.g. `*@example.com`) |
 | `INITIAL_ADMIN_EMAIL` | Email for the initial admin account |
 | `OIDC_NAME` | Display name for OIDC provider |

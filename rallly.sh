@@ -98,9 +98,15 @@ cmd_setup() {
   echo ""
   prompt SMTP_HOST "SMTP host"
   prompt SMTP_PORT "SMTP port" "587"
-  prompt SMTP_SECURE "SMTP uses SSL/TLS (true/false)" "true"
   prompt SMTP_USER "SMTP username"
   prompt_secret SMTP_PWD "SMTP password"
+
+  # Implicit TLS on 465; STARTTLS/plain on everything else (587, 25, 2525, ...)
+  if [ "$SMTP_PORT" = "465" ]; then
+    SMTP_SECURE=true
+  else
+    SMTP_SECURE=false
+  fi
 
   echo ""
   info "Generating secrets..."
