@@ -89,8 +89,9 @@ cmd_setup() {
   echo ""
 
   prompt DOMAIN "Domain name (e.g. rallly.example.com)"
-  prompt ACME_EMAIL "Email for SSL certificates" ""
-  prompt SUPPORT_EMAIL "Support email shown to users" "$ACME_EMAIL"
+  prompt INITIAL_ADMIN_EMAIL "Admin email (used to log in to the admin panel)"
+  prompt ACME_EMAIL "Email for SSL certificates" "$INITIAL_ADMIN_EMAIL"
+  prompt SUPPORT_EMAIL "Support email shown to users" "$INITIAL_ADMIN_EMAIL"
 
   echo ""
   echo "  ── Email (SMTP) ──"
@@ -122,6 +123,7 @@ ACME_EMAIL=$ACME_EMAIL
 # ── App Settings ──
 SECRET_PASSWORD=$secret_password
 SUPPORT_EMAIL=$SUPPORT_EMAIL
+INITIAL_ADMIN_EMAIL=$INITIAL_ADMIN_EMAIL
 
 # ── SMTP ──
 SMTP_HOST=$SMTP_HOST
