@@ -13,6 +13,15 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
+# Enable the bundled Garage service unless the user has pointed Rallly at an
+# external S3-compatible endpoint in .env. Any S3_ENDPOINT other than the
+# bundled Garage URL disables the local Garage container.
+if [ -z "${S3_ENDPOINT:-}" ] || [ "${S3_ENDPOINT}" = "http://garage:3900" ]; then
+  export COMPOSE_PROFILES="bundled-storage"
+else
+  export COMPOSE_PROFILES=""
+fi
+
 # ── Helpers ─────────────────────────────────────────────────────
 
 info()  { echo "  → $*"; }
