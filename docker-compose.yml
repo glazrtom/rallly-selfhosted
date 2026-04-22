@@ -28,15 +28,16 @@ services:
     image: ${RALLLY_IMAGE:-lukevella/rallly:4}
     restart: always
     depends_on:
-      db:
-        condition: service_healthy
       serverless-redis-http:
         condition: service_started
     env_file:
       - .env
     environment:
       - NEXT_PUBLIC_BASE_URL=https://${DOMAIN}
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/rallly
+      # Database — defaults to the bundled Postgres service.
+      # Override DATABASE_URL in .env to point at an external provider
+      # (RDS, Supabase, Neon, ...). Setting it disables the bundled db.
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:${POSTGRES_PASSWORD}@db:5432/rallly}
       # Object storage — defaults to the bundled Garage service.
       # Override S3_ENDPOINT / S3_BUCKET_NAME / S3_REGION in .env to point
       # at an external provider (AWS S3, Cloudflare R2, MinIO, ...).
@@ -55,10 +56,14 @@ services:
       - "traefik.http.routers.rallly.tls.certresolver=letsencrypt"
       - "traefik.http.services.rallly.loadbalancer.server.port=3000"
 
-  # ── Database ──────────────────────────────────────────────────
+  # ── Database (bundled) ────────────────────────────────────────
+  # Only started when the `bundled-db` profile is active.
+  # rallly.sh enables this profile automatically unless DATABASE_URL
+  # is set in .env to an external Postgres endpoint.
   db:
     image: postgres:14-alpine
     restart: always
+    profiles: ["bundled-db"]
     volumes:
       - db-data:/var/lib/postgresql/data
     environment:

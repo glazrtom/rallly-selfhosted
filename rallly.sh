@@ -13,14 +13,20 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-# Enable the bundled Garage service unless the user has pointed Rallly at an
-# external S3-compatible endpoint in .env. Any S3_ENDPOINT other than the
-# bundled Garage URL disables the local Garage container.
+# Enable bundled services unless the user has pointed Rallly at external
+# providers in .env. Setting S3_ENDPOINT to a non-Garage endpoint disables
+# the bundled Garage container; setting DATABASE_URL disables the bundled
+# Postgres container.
+_profiles=()
 if [ -z "${S3_ENDPOINT:-}" ] || [ "${S3_ENDPOINT}" = "http://garage:3900" ]; then
-  export COMPOSE_PROFILES="bundled-storage"
-else
-  export COMPOSE_PROFILES=""
+  _profiles+=("bundled-storage")
 fi
+if [ -z "${DATABASE_URL:-}" ]; then
+  _profiles+=("bundled-db")
+fi
+COMPOSE_PROFILES="$(IFS=,; echo "${_profiles[*]-}")"
+export COMPOSE_PROFILES
+unset _profiles
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -227,8 +233,16 @@ cmd_backup() {
   mkdir -p "$backup_dir"
 
   echo "Backing up database..."
-  docker compose -f "$COMPOSE_FILE" exec -T db \
-    pg_dump -U postgres rallly | gzip > "$backup_file"
+  if [ -z "${DATABASE_URL:-}" ]; then
+    docker compose -f "$COMPOSE_FILE" exec -T db \
+      pg_dump -U postgres rallly | gzip > "$backup_file"
+  else
+    # External Postgres — run pg_dump in a throwaway container.
+    # Uses the same major version as the bundled image; for newer server
+    # versions you may need to run pg_dump manually with a matching client.
+    docker run --rm -i postgres:14-alpine \
+      pg_dump "$DATABASE_URL" | gzip > "$backup_file"
+  fi
 
   echo "Backup saved to: $backup_file"
 }
