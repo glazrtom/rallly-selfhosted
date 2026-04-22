@@ -96,18 +96,21 @@ preflight() {
     ok "openssl is available."
   fi
 
-  # Check ports 80/443
+  # Check ports 80/443 — only strictly required for the bundled Traefik.
+  # Warn rather than fail so users with an existing reverse proxy can still
+  # install and switch to PROXY_MODE=external during setup.
   local port_busy=false
   for port in 80 443; do
     if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
        lsof -iTCP:"$port" -sTCP:LISTEN &>/dev/null 2>&1; then
-      error "Port $port is already in use."
+      echo "  ! Port $port is in use."
       port_busy=true
     fi
   done
   if [ "$port_busy" = true ]; then
-    error "Ports 80 and 443 must be free for Traefik. Please stop the conflicting service."
-    exit 1
+    echo "    If you're using an existing reverse proxy (Caddy, Nginx, ...),"
+    echo "    choose 'external' at the reverse proxy prompt during setup."
+    echo "    Otherwise, stop the conflicting service before continuing."
   else
     ok "Ports 80 and 443 are available."
   fi

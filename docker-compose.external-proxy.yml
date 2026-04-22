@@ -1,0 +1,11 @@
+# Override used when PROXY_MODE=external.
+# Publishes the web service on a host port so an external reverse proxy
+# (Caddy, Nginx, Cloudflare Tunnel, ...) can route traffic to it.
+#
+# WEB_PORT controls the bind — defaults to loopback on 3000. Set to
+# "0.0.0.0:3000" to expose on all interfaces, or "127.0.0.1:8080" to
+# move the host port.
+services:
+  web:
+    ports:
+      - "${WEB_PORT:-127.0.0.1:3000}:3000"

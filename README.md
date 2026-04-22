@@ -45,6 +45,16 @@ All configuration lives in the `.env` file. See [`.env.example`](.env.example) f
 
 > **Note:** Only modify `.env` for configuration. Editing other files (e.g. `docker-compose.yml`, `rallly.sh`) may cause conflicts when updating with `./rallly.sh update`.
 
+### Reverse proxy modes
+
+Rallly ships with Traefik and Let's Encrypt enabled by default. If you're running Rallly alongside other apps behind an existing reverse proxy (Caddy, Nginx, Cloudflare Tunnel, ...), set `PROXY_MODE=external` in `.env`.
+
+In external mode:
+- Traefik is not started.
+- The `web` container is published on `127.0.0.1:3000` by default — point your reverse proxy at it and handle HTTPS there.
+- Use `WEB_PORT` to change the bind (e.g. `WEB_PORT=0.0.0.0:3000` to expose on all interfaces, or `WEB_PORT=127.0.0.1:8080` to move the port).
+- `NEXT_PUBLIC_BASE_URL` is still derived from `DOMAIN`, so set `DOMAIN` to the public hostname your proxy terminates TLS for.
+
 ### Required
 
 | Variable | Description |
@@ -71,6 +81,8 @@ All configuration lives in the `.env` file. See [`.env.example`](.env.example) f
 | `OIDC_CLIENT_ID` | OIDC client ID |
 | `OIDC_CLIENT_SECRET` | OIDC client secret |
 | `RALLLY_IMAGE` | Override the Docker image (default: `lukevella/rallly:4`) |
+| `PROXY_MODE` | `bundled` (default) to run Traefik, or `external` to bring your own reverse proxy |
+| `WEB_PORT` | When `PROXY_MODE=external`, host binding for the web container (default: `127.0.0.1:3000`) |
 
 ### Auto-configured
 

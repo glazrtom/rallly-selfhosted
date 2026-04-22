@@ -1,8 +1,13 @@
 services:
-  # ── Reverse Proxy ─────────────────────────────────────────────
+  # ── Reverse Proxy (bundled) ───────────────────────────────────
+  # Only started when the `bundled-proxy` profile is active.
+  # rallly.sh enables this profile automatically unless PROXY_MODE=external
+  # is set in .env, in which case Traefik is skipped and `web` is published
+  # on a host port so an external reverse proxy can route to it.
   traefik:
     image: traefik:v3
     restart: always
+    profiles: ["bundled-proxy"]
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
