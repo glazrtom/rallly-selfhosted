@@ -6,8 +6,9 @@ This repository provides a batteries-included Docker Compose stack with automati
 
 ## Requirements
 
+- A server with at least **2 GB RAM**
 - **Docker 19.03 or newer** with **Compose v2**
-- A server with ports **80** and **443** available
+- Ports **80** and **443** available
 - A domain name pointed at the server's IP
 - An **SMTP server** for sending emails (e.g. Resend, Mailgun, Amazon SES)
 - **openssl** (for generating secrets)
@@ -124,33 +125,31 @@ gunzip < backups/rallly_20240101_120000.sql.gz | docker compose exec -T db psql 
 ## Architecture
 
 ```
-                    ┌──────────────┐
-  HTTP/HTTPS ──────►│   Traefik    │ (ports 80/443, auto HTTPS)
-                    └──────┬───────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-              ▼            ▼            ▼
-        ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │  Rallly  │ │  Garage  │ │          │
-        │  (app)   │ │  (S3)    │ │          │
-        └────┬─────┘ └──────────┘ │          │
-             │                    │          │
-    ┌────────┼────────┐           │          │
-    │        │        │           │          │
-    ▼        ▼        ▼           │          │
-┌──────┐ ┌──────┐ ┌──────────┐   │          │
-│  DB  │ │Redis │ │serverless│   │          │
-│(PG17)│ │  7   │◄┤redis-http│   │          │
-└──────┘ └──────┘ └──────────┘   │          │
+                  ┌──────────────┐
+HTTP/HTTPS ──────►│   Traefik    │ (ports 80/443, auto HTTPS)
+                  └──────┬───────┘
+                         │
+                         ▼
+                   ┌──────────┐
+                   │  Rallly  │
+                   │  (app)   │
+                   └────┬─────┘
+                        │
+        ┌───────┬───────┼────────┐
+        │       │       │        │
+        ▼       ▼       ▼        ▼
+     ┌──────┐┌─────┐┌──────┐┌──────────┐
+     │  DB  ││Redis││Garage││serverless│
+     │(PG14)││  7  ││ (S3) ││redis-http│
+     └──────┘└─────┘└──────┘└──────────┘
 ```
 
 - **Traefik** — Reverse proxy with automatic HTTPS via Let's Encrypt
 - **Rallly** — The web application
-- **PostgreSQL 17** — Database
+- **PostgreSQL 14** — Database
 - **Redis 7** — Rate limiting and session storage
 - **serverless-redis-http** — REST API bridge for Redis
-- **Garage** — S3-compatible object storage for file uploads
+- **Garage** — S3-compatible object storage for file uploads (internal only, proxied through the app)
 
 Only Traefik binds to host ports. All other services are isolated on the Docker network.
 
