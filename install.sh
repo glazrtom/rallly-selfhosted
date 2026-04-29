@@ -176,12 +176,7 @@ download_files() {
     fi
   else
     info "Downloading archive..."
-    local tmp
-    tmp="$(mktemp -d)"
-    curl -fsSL "$REPO_TARBALL" | tar -xz -C "$tmp"
-    cp -r "$tmp"/rallly-selfhosted-main/* "$install_dir/"
-    cp -r "$tmp"/rallly-selfhosted-main/.gitignore "$install_dir/" 2>/dev/null || true
-    rm -rf "$tmp"
+    curl -fsSL "$REPO_TARBALL" | tar -xz --strip-components=1 -C "$install_dir"
   fi
 
   chmod +x "$install_dir/rallly.sh"
