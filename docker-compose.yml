@@ -87,6 +87,7 @@ services:
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
     environment:
+      - GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET}
       - GARAGE_DEFAULT_ACCESS_KEY=${S3_ACCESS_KEY_ID}
       - GARAGE_DEFAULT_SECRET_KEY=${S3_SECRET_ACCESS_KEY}
       - GARAGE_DEFAULT_BUCKET=rallly

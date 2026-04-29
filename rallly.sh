@@ -152,11 +152,12 @@ cmd_setup() {
   echo ""
   info "Generating secrets..."
 
-  local secret_password postgres_password s3_access_key s3_secret_key
+  local secret_password postgres_password s3_access_key s3_secret_key garage_rpc_secret
   secret_password="$(generate_secret 32)"
   postgres_password="$(generate_secret 24)"
   s3_access_key="$(generate_secret 16)"
   s3_secret_key="$(generate_secret 32)"
+  garage_rpc_secret="$(generate_secret 32)"
 
   {
     cat <<ENVEOF
@@ -198,6 +199,7 @@ SMTP_PWD=$SMTP_PWD
 POSTGRES_PASSWORD=$postgres_password
 S3_ACCESS_KEY_ID=$s3_access_key
 S3_SECRET_ACCESS_KEY=$s3_secret_key
+GARAGE_RPC_SECRET=$garage_rpc_secret
 ENVEOF
   } > "$ENV_FILE"
 
