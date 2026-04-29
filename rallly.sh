@@ -125,7 +125,7 @@ cmd_setup() {
   echo ""
 
   prompt DOMAIN "Domain name (e.g. rallly.example.com)"
-  prompt INITIAL_ADMIN_EMAIL "Admin email (used to log in to the admin panel)"
+  prompt INITIAL_ADMIN_EMAIL "Admin email (used to log in to the control panel)"
   prompt SUPPORT_EMAIL "Support email shown to users" "$INITIAL_ADMIN_EMAIL"
 
   echo ""
