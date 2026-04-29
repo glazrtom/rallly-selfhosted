@@ -238,7 +238,12 @@ main() {
     ./rallly.sh help      — see all commands
 
 EOF
+
+  # Exit from inside main: when the script is run via `curl | bash`,
+  # bash reads commands from the pipe (stdin). `main` redirects stdin
+  # to /dev/tty for prompts, so any `exit` *after* `main` would never
+  # be read — bash would block on /dev/tty waiting for input.
+  exit 0
 }
 
 main
-exit 0
