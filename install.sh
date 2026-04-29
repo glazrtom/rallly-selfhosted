@@ -186,6 +186,18 @@ download_files() {
 # ── Main ────────────────────────────────────────────────────────
 
 main() {
+  # When invoked via `curl … | bash`, stdin is the script body, so `read`
+  # hits EOF and `set -e` exits before any prompt runs. Reattach stdin to
+  # the user's terminal; child commands (rallly.sh setup) inherit it too.
+  if [ ! -t 0 ]; then
+    if [ -r /dev/tty ]; then
+      exec < /dev/tty
+    else
+      error "No interactive terminal available. Download install.sh and run it directly."
+      exit 1
+    fi
+  fi
+
   print_banner
 
   preflight
