@@ -1,0 +1,4 @@
+.env
+backups/
+.DS_Store
+.claude/
