@@ -4,13 +4,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env"
 
-# Load .env if it exists
-if [ -f "$ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$ENV_FILE"
-  set +a
-fi
+# Read specific values from .env without executing it as shell. `source` would
+# treat values containing $(...), backticks, or globs as code — risky for
+# user-supplied fields like SMTP_PWD. Docker Compose reads .env on its own.
+read_env() {
+  [ -f "$ENV_FILE" ] || return 0
+  awk -F= -v key="$1" '
+    /^[[:space:]]*#/ { next }
+    $1 == key { sub(/^[^=]+=/, ""); val = $0 }
+    END { print val }
+  ' "$ENV_FILE"
+}
+
+PROXY_MODE="$(read_env PROXY_MODE)"
+S3_ENDPOINT="$(read_env S3_ENDPOINT)"
+DATABASE_URL="$(read_env DATABASE_URL)"
+DOMAIN="$(read_env DOMAIN)"
 
 # Compose file selection: base, plus the external-proxy override when the
 # user is bringing their own reverse proxy (PROXY_MODE=external).
