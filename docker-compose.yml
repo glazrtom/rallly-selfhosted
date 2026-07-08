@@ -59,12 +59,20 @@ services:
   # Only started when the `bundled-db` profile is active.
   # rallly.sh enables this profile automatically unless DATABASE_URL
   # is set in .env to an external Postgres endpoint.
+  # POSTGRES_VERSION and POSTGRES_DATA_MOUNT are managed by rallly.sh:
+  # pinned in .env on first start (existing volumes keep their current
+  # major, fresh installs get 18). The defaults below match the original
+  # postgres 14 deployment so that older versions of rallly.sh — which
+  # don't set these variables — keep working during an update. They are
+  # a compatibility fallback, not a version choice; do not bump them.
   db:
-    image: postgres:14-alpine
+    image: postgres:${POSTGRES_VERSION:-14}-alpine
     restart: always
     profiles: ["bundled-db"]
     volumes:
-      - db-data:/var/lib/postgresql/data
+      # postgres images ≥18 moved PGDATA and expect the volume mounted at
+      # /var/lib/postgresql instead of /var/lib/postgresql/data.
+      - db-data:${POSTGRES_DATA_MOUNT:-/var/lib/postgresql/data}
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=rallly

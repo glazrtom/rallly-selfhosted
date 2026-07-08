@@ -20,6 +20,7 @@ PROXY_MODE="$(read_env PROXY_MODE)"
 S3_ENDPOINT="$(read_env S3_ENDPOINT)"
 DATABASE_URL="$(read_env DATABASE_URL)"
 DOMAIN="$(read_env DOMAIN)"
+POSTGRES_VERSION="$(read_env POSTGRES_VERSION)"
 
 # Compose file selection: base, plus the external-proxy override when the
 # user is bringing their own reverse proxy (PROXY_MODE=external).
@@ -101,6 +102,112 @@ check_docker() {
     error "Docker Compose v2 is not available."
     exit 1
   fi
+}
+
+# Set or update a KEY=value line in .env, preserving everything else.
+upsert_env() {
+  local key="$1" value="$2"
+  [ -f "$ENV_FILE" ] || return 0
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    local tmp
+    tmp="$(mktemp)"
+    awk -v key="$key" -v val="$value" -F= '
+      $1 == key && !/^[[:space:]]*#/ { print key "=" val; next }
+      { print }
+    ' "$ENV_FILE" > "$tmp"
+    mv "$tmp" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+# Default major version for the bundled Postgres on fresh installs.
+# Existing data volumes are never moved to this — they stay pinned to the
+# major that initialised them until explicitly upgraded.
+PG_DEFAULT_MAJOR=18
+
+# The compose-managed volume name for the bundled db: <project>_db-data.
+db_volume_name() {
+  local project="${COMPOSE_PROJECT_NAME:-$(read_env COMPOSE_PROJECT_NAME)}"
+  if [ -z "$project" ]; then
+    # Replicate Docker Compose's default project name: directory basename,
+    # lowercased, invalid characters stripped.
+    project="$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9_-]//g' -e 's/^[_-]*//')"
+  fi
+  echo "${project}_db-data"
+}
+
+# Read the PostgreSQL major version out of an existing data volume.
+# Pre-18 layout has PG_VERSION at the volume root; 18+ images keep it
+# at <major>/docker/PG_VERSION.
+detect_volume_pg_version() {
+  local volume="$1"
+  docker run --rm -v "${volume}:/pgdata:ro" alpine:3 sh -c \
+    'cat /pgdata/PG_VERSION 2>/dev/null || cat /pgdata/*/docker/PG_VERSION 2>/dev/null' \
+    | sort -n | tail -n1 | tr -d '[:space:]'
+}
+
+# Pin the bundled Postgres major version. Existing data volumes keep the
+# version they were initialized with (read from PG_VERSION — a manually
+# upgraded install stays on its own major); fresh installs get 18. The pin
+# is persisted as POSTGRES_VERSION in .env so it is stable across runs and
+# never floats.
+ensure_postgres_pin() {
+  if [ -n "${DATABASE_URL:-}" ]; then
+    # External database — the bundled db service never starts, but compose
+    # still interpolates its config. Export parse-only values; don't touch
+    # the user's .env.
+    POSTGRES_VERSION="${POSTGRES_VERSION:-$PG_DEFAULT_MAJOR}"
+  elif [ -z "${POSTGRES_VERSION:-}" ]; then
+    local volume contents
+    volume="$(db_volume_name)"
+    # Distinguish "volume doesn't exist" from "can't reach the daemon" —
+    # otherwise a stopped daemon would look like a fresh install and pin
+    # the new default major over an existing volume's data.
+    if ! docker volume ls -q &>/dev/null; then
+      error "Cannot query Docker volumes — is the Docker daemon running?"
+      exit 1
+    fi
+    if docker volume inspect "$volume" &>/dev/null; then
+      # `|| true`: under `set -eo pipefail` a volume without a readable
+      # PG_VERSION would abort the script before the fallbacks below run.
+      POSTGRES_VERSION="$(detect_volume_pg_version "$volume" || true)"
+      if [ -n "$POSTGRES_VERSION" ]; then
+        info "Existing database volume detected — pinning PostgreSQL $POSTGRES_VERSION."
+      elif contents="$(docker run --rm -v "${volume}:/pgdata:ro" alpine:3 ls -A /pgdata 2>/dev/null)" && [ -z "$contents" ]; then
+        # Volume exists but Postgres never initialised it — safe to treat
+        # as a fresh install.
+        POSTGRES_VERSION="$PG_DEFAULT_MAJOR"
+        info "Empty database volume — provisioning PostgreSQL $POSTGRES_VERSION."
+      else
+        error "Found an existing database volume ($volume) but could not read its PostgreSQL version."
+        error "Set POSTGRES_VERSION in $ENV_FILE manually (e.g. POSTGRES_VERSION=14) and try again."
+        exit 1
+      fi
+    else
+      POSTGRES_VERSION="$PG_DEFAULT_MAJOR"
+      info "No existing database volume — provisioning PostgreSQL $POSTGRES_VERSION."
+    fi
+    upsert_env POSTGRES_VERSION "$POSTGRES_VERSION"
+  fi
+
+  case "$POSTGRES_VERSION" in
+    ''|*[!0-9]*)
+      error "Invalid POSTGRES_VERSION '$POSTGRES_VERSION' in $ENV_FILE — expected a major version number (e.g. 14)."
+      exit 1
+      ;;
+  esac
+
+  if [ "$POSTGRES_VERSION" -ge 18 ]; then
+    POSTGRES_DATA_MOUNT=/var/lib/postgresql
+  else
+    POSTGRES_DATA_MOUNT=/var/lib/postgresql/data
+  fi
+  if [ -z "${DATABASE_URL:-}" ]; then
+    upsert_env POSTGRES_DATA_MOUNT "$POSTGRES_DATA_MOUNT"
+  fi
+  export POSTGRES_VERSION POSTGRES_DATA_MOUNT
 }
 
 # ── Commands ────────────────────────────────────────────────────
@@ -222,6 +329,7 @@ cmd_start() {
     error "No .env file found. Run './rallly.sh setup' first."
     exit 1
   fi
+  ensure_postgres_pin
   docker compose up -d
   echo ""
   echo "Rallly is starting at https://${DOMAIN:-localhost}"
@@ -250,6 +358,7 @@ cmd_update() {
     }
     echo ""
   fi
+  ensure_postgres_pin
   echo "Pulling latest images..."
   docker compose pull
   echo ""
@@ -284,15 +393,17 @@ cmd_backup() {
 
   mkdir -p "$backup_dir"
 
+  ensure_postgres_pin
+
   echo "Backing up database..."
   if [ -z "${DATABASE_URL:-}" ]; then
     docker compose exec -T db \
       pg_dump -U postgres rallly | gzip > "$backup_file"
   else
-    # External Postgres — run pg_dump in a throwaway container.
-    # Uses the same major version as the bundled image; for newer server
-    # versions you may need to run pg_dump manually with a matching client.
-    docker run --rm -i postgres:14-alpine \
+    # External Postgres — run pg_dump in a throwaway container. pg_dump
+    # can dump any server up to its own major version; for newer servers
+    # run pg_dump manually with a matching client.
+    docker run --rm -i "postgres:${POSTGRES_VERSION}-alpine" \
       pg_dump "$DATABASE_URL" | gzip > "$backup_file"
   fi
 
