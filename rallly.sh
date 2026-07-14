@@ -421,19 +421,21 @@ cmd_backup() {
   local backup_file="$backup_dir/rallly_${timestamp}.sql.gz"
 
   mkdir -p "$backup_dir"
+  chmod 700 "$backup_dir"
 
   ensure_postgres_pin
 
+  # Dumps contain the full database — keep them private like .env.
   echo "Backing up database..."
   if [ -z "${DATABASE_URL:-}" ]; then
     docker compose exec -T db \
-      pg_dump -U postgres rallly | gzip > "$backup_file"
+      pg_dump -U postgres rallly | (umask 077; gzip > "$backup_file")
   else
     # External Postgres — run pg_dump in a throwaway container. pg_dump
     # can dump any server up to its own major version; for newer servers
     # run pg_dump manually with a matching client.
     docker run --rm -i "postgres:${POSTGRES_VERSION}-alpine" \
-      pg_dump "$DATABASE_URL" | gzip > "$backup_file"
+      pg_dump "$DATABASE_URL" | (umask 077; gzip > "$backup_file")
   fi
 
   echo "Backup saved to: $backup_file"
@@ -454,11 +456,16 @@ wait_for_db() {
   return 1
 }
 
-# Counts used to sanity check the restore. Prints "n/a" instead of failing
-# so a missing table (e.g. a not-yet-migrated install) doesn't abort — the
-# values are compared before/after the restore and only need to match.
-db_count() {
-  docker compose exec -T db psql -tA -U postgres -d rallly -c "$1" 2>/dev/null || echo "n/a"
+# Per-table row counts ("table:count" lines) used to verify the restore —
+# count(*) over every table in the public schema, so the check covers the
+# whole application schema, not just a known table. Appends a sentinel on
+# query failure so a broken connection can't masquerade as a match.
+db_table_counts() {
+  docker compose exec -T db psql -tA -v ON_ERROR_STOP=1 -U postgres -d rallly 2>/dev/null <<'SQL' || echo "query-failed"
+SELECT format('SELECT %L || count(*) FROM %I.%I', tablename || ':', schemaname, tablename)
+FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename
+\gexec
+SQL
 }
 
 # Abort the upgrade before anything is switched over. The original volume
@@ -514,6 +521,16 @@ cmd_upgrade_db() {
     exit 1
   fi
 
+  # The target volume can already exist: from an upgrade attempt that failed
+  # (partial restore), or from a completed upgrade the user rolled back from.
+  # The pin in .env still points at the old major, so it is not in use — but
+  # in the rollback case it may hold rows written after the earlier upgrade.
+  # Deleting it is part of what the user confirms below.
+  local leftover_volume=""
+  if docker volume inspect "$new_volume" &>/dev/null; then
+    leftover_volume="$new_volume"
+  fi
+
   echo ""
   echo "  This will upgrade the bundled PostgreSQL from $old_major to $target_major:"
   echo ""
@@ -524,6 +541,13 @@ cmd_upgrade_db() {
   echo ""
   echo "  The current PostgreSQL $old_major volume ($old_volume) is left untouched"
   echo "  so you can roll back."
+  if [ -n "$leftover_volume" ]; then
+    echo ""
+    echo "  ⚠ The volume $leftover_volume already exists — likely from an earlier"
+    echo "    upgrade attempt or a rollback. It will be DELETED and recreated from"
+    echo "    the current database. If it might still hold data you need (e.g. rows"
+    echo "    written after a previous upgrade), answer no and inspect it first."
+  fi
   echo ""
   local confirm
   read -rp "  Proceed? [y/N]: " confirm
@@ -544,13 +568,17 @@ cmd_upgrade_db() {
     fail_upgrade "The current database did not come up. Check './rallly.sh logs db'."
   fi
 
-  local tables_before polls_before
-  tables_before="$(db_count "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")"
-  polls_before="$(db_count 'SELECT count(*) FROM polls')"
+  local counts_before
+  counts_before="$(db_table_counts)"
+  case "$counts_before" in *query-failed*)
+    fail_upgrade "Could not read row counts from the current database."
+  ;; esac
 
   local backup_dir="$SCRIPT_DIR/backups"
   mkdir -p "$backup_dir"
-  local dump_file="$backup_dir/rallly_pg${old_major}_to_pg${target_major}_$(date +%Y%m%d_%H%M%S).sql.gz"
+  chmod 700 "$backup_dir"
+  local dump_file
+  dump_file="$backup_dir/rallly_pg${old_major}_to_pg${target_major}_$(date +%Y%m%d_%H%M%S).sql.gz"
 
   # Dump with a client matching the target major — pg_dump can read any
   # older server, and its output is guaranteed to restore into the target.
@@ -558,9 +586,10 @@ cmd_upgrade_db() {
   info "Dumping the database with a PostgreSQL $target_major client..."
   local db_cid
   db_cid="$(docker compose ps -q db)"
+  # Dumps contain the full database — keep them private like .env.
   if ! docker run --rm --network "container:${db_cid}" -e PGPASSWORD="$postgres_password" \
       "postgres:${target_major}-alpine" \
-      pg_dump -h 127.0.0.1 -U postgres rallly | gzip > "$dump_file"; then
+      pg_dump -h 127.0.0.1 -U postgres rallly | (umask 077; gzip > "$dump_file"); then
     fail_upgrade "pg_dump failed."
   fi
   if [ ! -s "$dump_file" ]; then
@@ -571,12 +600,10 @@ cmd_upgrade_db() {
   info "Stopping PostgreSQL $old_major..."
   docker compose down
 
-  # A previous run that failed after this point leaves a partially restored
-  # volume behind. The pin in .env still points at the old major, so that
-  # volume was never switched over — safe to clear and retry.
-  if docker volume inspect "$new_volume" &>/dev/null; then
-    info "Removing volume $new_volume left over from a previous upgrade attempt..."
-    docker volume rm "$new_volume" >/dev/null || fail_upgrade "Could not remove the leftover volume $new_volume."
+  # Deletion was disclosed in the confirmation prompt above.
+  if [ -n "$leftover_volume" ] && docker volume inspect "$leftover_volume" &>/dev/null; then
+    info "Removing volume $leftover_volume left over from a previous upgrade..."
+    docker volume rm "$leftover_volume" >/dev/null || fail_upgrade "Could not remove the leftover volume $leftover_volume."
   fi
 
   info "Starting a fresh PostgreSQL $target_major..."
@@ -592,17 +619,40 @@ cmd_upgrade_db() {
     fail_upgrade "Restoring the dump into PostgreSQL $target_major failed."
   fi
 
-  local tables_after polls_after
-  tables_after="$(db_count "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")"
-  polls_after="$(db_count 'SELECT count(*) FROM polls')"
-  if [ "$tables_before" != "$tables_after" ] || [ "$polls_before" != "$polls_after" ]; then
-    fail_upgrade "Sanity check failed after the restore (tables: $tables_before -> $tables_after, polls: $polls_before -> $polls_after)."
+  local counts_after
+  counts_after="$(db_table_counts)"
+  case "$counts_after" in *query-failed*)
+    fail_upgrade "Could not read row counts from the restored database."
+  ;; esac
+  if [ "$counts_before" != "$counts_after" ]; then
+    error "Row counts differ after the restore:"
+    diff <(printf '%s\n' "$counts_before") <(printf '%s\n' "$counts_after") >&2 || true
+    fail_upgrade "Sanity check failed after the restore."
   fi
-  ok "Restore verified (tables: $tables_after, polls rows: $polls_after)."
+  local table_total
+  table_total="$(printf '%s' "$counts_before" | grep -c . || true)"
+  ok "Restore verified ($table_total tables, row counts match)."
 
-  upsert_env POSTGRES_VERSION "$target_major"
-  upsert_env POSTGRES_DATA_MOUNT "$POSTGRES_DATA_MOUNT"
-  upsert_env POSTGRES_VOLUME "$new_volume_key"
+  # Switch all three pins in one atomic write — a partial switch (e.g. the
+  # new major pointed at the old volume) would leave an install that cannot
+  # start. The temp file lives next to .env so the rename stays atomic.
+  local tmp_env
+  tmp_env="$(mktemp "$ENV_FILE.XXXXXX")" || fail_upgrade "Could not create a temporary file to update .env."
+  if ! { awk -F= -v ver="$target_major" -v mount="$POSTGRES_DATA_MOUNT" -v vol="$new_volume_key" '
+    /^[[:space:]]*#/ { print; next }
+    $1 == "POSTGRES_VERSION"    { print "POSTGRES_VERSION=" ver; seen_ver = 1; next }
+    $1 == "POSTGRES_DATA_MOUNT" { print "POSTGRES_DATA_MOUNT=" mount; seen_mount = 1; next }
+    $1 == "POSTGRES_VOLUME"     { print "POSTGRES_VOLUME=" vol; seen_vol = 1; next }
+    { print }
+    END {
+      if (!seen_ver)   print "POSTGRES_VERSION=" ver
+      if (!seen_mount) print "POSTGRES_DATA_MOUNT=" mount
+      if (!seen_vol)   print "POSTGRES_VOLUME=" vol
+    }
+  ' "$ENV_FILE" > "$tmp_env" && chmod 600 "$tmp_env" && mv "$tmp_env" "$ENV_FILE"; }; then
+    rm -f "$tmp_env"
+    fail_upgrade "Could not update $ENV_FILE."
+  fi
 
   info "Restarting Rallly..."
   docker compose up -d
@@ -617,6 +667,10 @@ cmd_upgrade_db() {
   echo "    POSTGRES_VERSION=$old_major"
   echo "    POSTGRES_DATA_MOUNT=$old_mount"
   echo "    POSTGRES_VOLUME=$old_volume_key"
+  echo ""
+  echo "  ⚠ Rolling back restores the database as it was at the moment of this"
+  echo "    upgrade — anything created afterwards will be lost. Take a fresh"
+  echo "    './rallly.sh backup' before rolling back."
   echo ""
   echo "  Once you're confident everything works, reclaim disk space with:"
   echo "    docker volume rm $old_volume"
