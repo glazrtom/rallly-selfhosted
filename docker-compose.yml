@@ -72,7 +72,10 @@ services:
     volumes:
       # postgres images ≥18 moved PGDATA and expect the volume mounted at
       # /var/lib/postgresql instead of /var/lib/postgresql/data.
-      - db-data:${POSTGRES_DATA_MOUNT:-/var/lib/postgresql/data}
+      # POSTGRES_VOLUME selects which data volume is mounted — `rallly.sh
+      # upgrade-db` restores into a fresh volume and switches this over,
+      # leaving the previous volume in place for rollback.
+      - ${POSTGRES_VOLUME:-db-data}:${POSTGRES_DATA_MOUNT:-/var/lib/postgresql/data}
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=rallly
@@ -110,6 +113,9 @@ services:
 
 volumes:
   db-data:
+  # Holds the PostgreSQL 18 cluster after `rallly.sh upgrade-db` migrates an
+  # install from an older major. Unused (and never created) otherwise.
+  db-data-pg18:
   garage-meta:
   garage-data:
   acme-data:
