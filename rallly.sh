@@ -669,7 +669,7 @@ cmd_upgrade_db() {
   echo "    POSTGRES_VOLUME=$old_volume_key"
   echo ""
   echo "  ⚠ Rolling back restores the database as it was at the moment of this"
-  echo "    upgrade — anything created afterwards will be lost. Take a fresh"
+  echo "    upgrade — anything created afterward will be lost. Take a fresh"
   echo "    './rallly.sh backup' before rolling back."
   echo ""
   echo "  Once you're confident everything works, reclaim disk space with:"

@@ -130,7 +130,7 @@ Existing installs stay pinned to the PostgreSQL major version their data volume 
 
 This stops Rallly, dumps the database into `./backups/`, restores it into a fresh PostgreSQL 18 volume, verifies the restore, and switches over. Expect downtime for the duration (a few minutes for typical databases).
 
-The old data volume and the dump are kept, so you can roll back by restoring the previous values of `POSTGRES_VERSION`, `POSTGRES_DATA_MOUNT`, and `POSTGRES_VOLUME` in `.env` (the command prints them when it finishes) and running `./rallly.sh stop && ./rallly.sh start`. Note that rolling back restores the database as it was at the moment of the upgrade — anything created afterwards only exists in the new volume, so take a fresh `./rallly.sh backup` first. Once you're confident everything works, reclaim disk space by removing the old volume — the exact `docker volume rm` command is printed at the end of the upgrade.
+The old data volume and the dump are kept, so you can roll back by restoring the previous values of `POSTGRES_VERSION`, `POSTGRES_DATA_MOUNT`, and `POSTGRES_VOLUME` in `.env` (the command prints them when it finishes) and running `./rallly.sh stop && ./rallly.sh start`. Note that rolling back restores the database as it was at the moment of the upgrade — anything created afterward only exists in the new volume, so take a fresh `./rallly.sh backup` first. Once you're confident everything works, reclaim disk space by removing the old volume — the exact `docker volume rm` command is printed at the end of the upgrade.
 
 If you use an external database (`DATABASE_URL` set in `.env`), `upgrade-db` does not apply — upgrade with your database provider's tools.
 
