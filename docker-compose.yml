@@ -60,7 +60,16 @@ services:
       # its built-in roots. Unset by default, where the source resolves to
       # /dev/null — a mount that always succeeds and reads as an empty file,
       # so Node keeps using its built-in roots and nothing changes.
-      - ${CA_CERT_FILE:-/dev/null}:/etc/ssl/certs/rallly-custom-ca.pem:ro
+      # create_host_path is off so a mistyped path fails the start with a
+      # clear error. The default (long or short syntax) is to create the
+      # missing path as a directory, which mounts fine and starts fine —
+      # leaving Node with no certificate and the original TLS errors intact.
+      - type: bind
+        source: ${CA_CERT_FILE:-/dev/null}
+        target: /etc/ssl/certs/rallly-custom-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
