@@ -273,7 +273,19 @@ cmd_setup() {
   case "$PROXY_CHOICE" in
     3)
       PROXY_MODE=external
-      prompt LOCAL_PORT "Port to serve on" "3000"
+      # Re-prompt until the port is usable. An out-of-range value is only
+      # rejected later by `docker compose up`, long after setup has reported
+      # success — catch it while the user is still here to fix it.
+      while true; do
+        prompt LOCAL_PORT "Port to serve on" "3000"
+        case "$LOCAL_PORT" in
+          ''|*[!0-9]*) error "Port must be a number between 1 and 65535." ;;
+          *) if [ "$LOCAL_PORT" -ge 1 ] && [ "$LOCAL_PORT" -le 65535 ]; then
+               break
+             fi
+             error "Port must be a number between 1 and 65535." ;;
+        esac
+      done
       WEB_PORT="127.0.0.1:$LOCAL_PORT"
       DOMAIN="localhost:$LOCAL_PORT"
       BASE_URL="http://$DOMAIN"

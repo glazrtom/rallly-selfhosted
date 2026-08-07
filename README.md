@@ -59,7 +59,7 @@ In external mode:
 
 To try Rallly out on your own machine without a domain or TLS, choose **local** at the reverse proxy prompt during `./rallly.sh setup`. This is external mode with no proxy in front, served over plain http:
 
-```
+```dotenv
 PROXY_MODE=external
 WEB_PORT=127.0.0.1:3000
 DOMAIN=localhost:3000
@@ -75,7 +75,7 @@ Email is the one thing that won't work out of the box — magic links are how yo
 | Variable | Description |
 |---|---|
 | `DOMAIN` | Domain where Rallly will be accessible (e.g. `rallly.example.com`) |
-| `ACME_EMAIL` | Email for Let's Encrypt SSL certificate notifications |
+| `ACME_EMAIL` | Email for Let's Encrypt SSL certificate notifications. Only required when `PROXY_MODE=bundled` — external and local modes don't start Traefik |
 | `SECRET_PASSWORD` | Random secret key for encrypting sessions (min 32 chars) |
 | `SUPPORT_EMAIL` | Email shown to users for support |
 | `SMTP_HOST` | SMTP server host |
