@@ -35,7 +35,9 @@ services:
     env_file:
       - .env
     environment:
-      - NEXT_PUBLIC_BASE_URL=https://${DOMAIN}
+      # Defaults to https on the configured domain. Override in .env for a
+      # local instance served over plain http (e.g. http://localhost:3000).
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:-https://${DOMAIN}}
       # Database — defaults to the bundled Postgres service.
       # Override DATABASE_URL in .env to point at an external provider
       # (RDS, Supabase, Neon, ...). Setting it disables the bundled db.

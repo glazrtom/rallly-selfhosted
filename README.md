@@ -55,12 +55,27 @@ In external mode:
 - Use `WEB_PORT` to change the bind (e.g. `WEB_PORT=0.0.0.0:3000` to expose on all interfaces, or `WEB_PORT=127.0.0.1:8080` to move the port).
 - `NEXT_PUBLIC_BASE_URL` is still derived from `DOMAIN`, so set `DOMAIN` to the public hostname your proxy terminates TLS for.
 
+### Running locally
+
+To try Rallly out on your own machine without a domain or TLS, choose **local** at the reverse proxy prompt during `./rallly.sh setup`. This is external mode with no proxy in front, served over plain http:
+
+```dotenv
+PROXY_MODE=external
+WEB_PORT=127.0.0.1:3000
+DOMAIN=localhost:3000
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+```
+
+`NEXT_PUBLIC_BASE_URL` is set explicitly here because it otherwise defaults to `https://$DOMAIN`, and nothing is terminating TLS on localhost. The bundled Postgres and Garage containers still start as usual.
+
+Email is the one thing that won't work out of the box — magic links are how you sign in, so either point `SMTP_*` at a real server (or a local catcher like Mailpit) or read the link out of `./rallly.sh logs web`.
+
 ### Required
 
 | Variable | Description |
 |---|---|
 | `DOMAIN` | Domain where Rallly will be accessible (e.g. `rallly.example.com`) |
-| `ACME_EMAIL` | Email for Let's Encrypt SSL certificate notifications |
+| `ACME_EMAIL` | Email for Let's Encrypt SSL certificate notifications. Only required when `PROXY_MODE=bundled` — external and local modes don't start Traefik |
 | `SECRET_PASSWORD` | Random secret key for encrypting sessions (min 32 chars) |
 | `SUPPORT_EMAIL` | Email shown to users for support |
 | `SMTP_HOST` | SMTP server host |
@@ -83,6 +98,7 @@ In external mode:
 | `RALLLY_IMAGE` | Override the Docker image (default: `lukevella/rallly:4`) |
 | `PROXY_MODE` | `bundled` (default) to run Traefik, or `external` to bring your own reverse proxy |
 | `WEB_PORT` | When `PROXY_MODE=external`, host binding for the web container (default: `127.0.0.1:3000`) |
+| `NEXT_PUBLIC_BASE_URL` | Public URL Rallly builds links against (default: `https://$DOMAIN`). Set explicitly only to change the scheme — e.g. `http://localhost:3000` when running locally |
 
 ### Auto-configured
 
