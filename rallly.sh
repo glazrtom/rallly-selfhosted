@@ -219,6 +219,43 @@ ensure_postgres_pin() {
   export POSTGRES_VERSION POSTGRES_DATA_MOUNT
 }
 
+# The in-container path docker-compose.yml mounts CA_CERT_FILE at.
+CA_CERT_MOUNT=/etc/ssl/certs/rallly-custom-ca.pem
+
+# Point Node at the mounted CA bundle when CA_CERT_FILE is set. Compose can't
+# express "set this only when another variable is set" in a single value, so
+# NODE_EXTRA_CA_CERTS is written to .env here instead of being derived in
+# docker-compose.yml — that would clobber a value the user set themselves
+# (e.g. an install predating CA_CERT_FILE that bakes its own cert into a
+# custom RALLLY_IMAGE) with an empty string.
+ensure_ca_cert_env() {
+  local ca_cert_file node_extra
+  ca_cert_file="$(read_env CA_CERT_FILE)"
+  node_extra="$(read_env NODE_EXTRA_CA_CERTS)"
+
+  if [ -z "${ca_cert_file:-}" ]; then
+    # Only clear the value we manage — anything else is the user's own.
+    if [ "${node_extra:-}" = "$CA_CERT_MOUNT" ]; then
+      upsert_env NODE_EXTRA_CA_CERTS ""
+    fi
+    return 0
+  fi
+
+  if [ ! -f "$ca_cert_file" ]; then
+    error "CA_CERT_FILE points at '$ca_cert_file', which is not a file."
+    error "Set it to the path of a PEM certificate on this host, or remove it from $ENV_FILE."
+    exit 1
+  fi
+
+  if [ -n "${node_extra:-}" ] && [ "$node_extra" != "$CA_CERT_MOUNT" ]; then
+    error "Both CA_CERT_FILE and NODE_EXTRA_CA_CERTS are set in $ENV_FILE, and NODE_EXTRA_CA_CERTS points somewhere else ('$node_extra')."
+    error "Remove one of them — CA_CERT_FILE mounts a host certificate; NODE_EXTRA_CA_CERTS expects a path that already exists inside the container."
+    exit 1
+  fi
+
+  upsert_env NODE_EXTRA_CA_CERTS "$CA_CERT_MOUNT"
+}
+
 # Warn (never block, never auto-upgrade) when the pinned bundled Postgres
 # major is at or approaching end of life. Skipped on external databases —
 # they are not ours to upgrade.
@@ -395,6 +432,7 @@ cmd_start() {
     exit 1
   fi
   ensure_postgres_pin
+  ensure_ca_cert_env
   docker compose up -d
   echo ""
   echo "Rallly is starting at ${NEXT_PUBLIC_BASE_URL:-https://${DOMAIN:-localhost}}"
@@ -425,6 +463,7 @@ cmd_update() {
     echo ""
   fi
   ensure_postgres_pin
+  ensure_ca_cert_env
   echo "Pulling latest images..."
   docker compose pull
   echo ""

@@ -99,6 +99,7 @@ Email is the one thing that won't work out of the box — magic links are how yo
 | `PROXY_MODE` | `bundled` (default) to run Traefik, or `external` to bring your own reverse proxy |
 | `WEB_PORT` | When `PROXY_MODE=external`, host binding for the web container (default: `127.0.0.1:3000`) |
 | `NEXT_PUBLIC_BASE_URL` | Public URL Rallly builds links against (default: `https://$DOMAIN`). Set explicitly only to change the scheme — e.g. `http://localhost:3000` when running locally |
+| `CA_CERT_FILE` | Path on the host to a custom root CA certificate (PEM). Only needed if your network intercepts TLS with a corporate root CA. Mounted into the web container and trusted in addition to Node's built-in roots |
 
 ### Auto-configured
 
