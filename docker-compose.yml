@@ -50,16 +50,15 @@ services:
       - S3_REGION=${S3_REGION:-garage}
       - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
-      # Trust the mounted CA bundle (see volumes below). Expands to an empty
-      # value when CA_CERT_FILE is unset, which Node ignores.
-      - NODE_EXTRA_CA_CERTS=${CA_CERT_FILE:+/etc/ssl/certs/rallly-custom-ca.pem}
     volumes:
       # Custom root CA for networks that intercept TLS (corporate proxies).
-      # CA_CERT_FILE in .env points at a PEM file on the host; it is mounted
-      # here and NODE_EXTRA_CA_CERTS tells Node to trust it in addition to
-      # its built-in roots. Unset by default, where the source resolves to
-      # /dev/null — a mount that always succeeds and reads as an empty file,
-      # so Node keeps using its built-in roots and nothing changes.
+      # CA_CERT_FILE in .env points at a PEM file on the host and is mounted
+      # here; rallly.sh sets NODE_EXTRA_CA_CERTS to this path so Node trusts
+      # it in addition to its built-in roots. Unset by default, where the
+      # source resolves to /dev/null — a mount that always succeeds and reads
+      # as an empty file, so Node keeps using its built-in roots and nothing
+      # changes. NODE_EXTRA_CA_CERTS is deliberately not set here: it arrives
+      # via env_file, so a value the user set themselves is left alone.
       # create_host_path is off so a mistyped path fails the start with a
       # clear error. The default (long or short syntax) is to create the
       # missing path as a directory, which mounts fine and starts fine —
