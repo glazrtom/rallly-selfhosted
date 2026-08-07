@@ -50,6 +50,17 @@ services:
       - S3_REGION=${S3_REGION:-garage}
       - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
       - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+      # Trust the mounted CA bundle (see volumes below). Expands to an empty
+      # value when CA_CERT_FILE is unset, which Node ignores.
+      - NODE_EXTRA_CA_CERTS=${CA_CERT_FILE:+/etc/ssl/certs/rallly-custom-ca.pem}
+    volumes:
+      # Custom root CA for networks that intercept TLS (corporate proxies).
+      # CA_CERT_FILE in .env points at a PEM file on the host; it is mounted
+      # here and NODE_EXTRA_CA_CERTS tells Node to trust it in addition to
+      # its built-in roots. Unset by default, where the source resolves to
+      # /dev/null — a mount that always succeeds and reads as an empty file,
+      # so Node keeps using its built-in roots and nothing changes.
+      - ${CA_CERT_FILE:-/dev/null}:/etc/ssl/certs/rallly-custom-ca.pem:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=Host(`${DOMAIN}`)"
