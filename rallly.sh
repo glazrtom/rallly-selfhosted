@@ -450,17 +450,22 @@ cmd_restart() {
   check_docker
   ensure_postgres_pin
   ensure_ca_cert_env
-  # `docker compose restart` restarts containers as-is — it does not re-read
-  # .env or apply config changes. `up -d` recreates only what changed, so a
-  # restart picks up edits to .env the way users expect it to.
+  # Two steps, because neither alone is a restart that applies config:
+  # `up -d` re-reads .env and recreates whatever changed, but leaves
+  # unchanged containers running untouched; `restart` always cycles the
+  # processes but never re-reads config. Running both means a restart
+  # picks up .env edits and still restarts when nothing changed.
   docker compose up -d
+  docker compose restart
   echo "Rallly has been restarted."
 }
 
 cmd_update() {
   check_docker
-  # Update repo files if this is a git clone
-  if [ -d "$SCRIPT_DIR/.git" ]; then
+  # Update repo files if this is a git clone. Skipped after a re-exec — the
+  # pull already happened in the run that exec'd us, and repeating it could
+  # pick up a revision newer than the script now executing.
+  if [ -d "$SCRIPT_DIR/.git" ] && [ -z "${RALLLY_UPDATE_REEXEC:-}" ]; then
     echo "Updating configuration files..."
     local before after
     before="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || true)"
@@ -473,7 +478,7 @@ cmd_update() {
     # this run would still be the old code — including any new .env handling
     # the update just introduced. Re-exec once so the update finishes with
     # the version it just installed. RALLLY_UPDATE_REEXEC stops it looping.
-    if [ -n "$before" ] && [ "$before" != "$after" ] && [ -z "${RALLLY_UPDATE_REEXEC:-}" ]; then
+    if [ -n "$before" ] && [ "$before" != "$after" ]; then
       RALLLY_UPDATE_REEXEC=1 exec "$SCRIPT_DIR/rallly.sh" update
     fi
   fi
