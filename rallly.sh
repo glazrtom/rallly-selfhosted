@@ -20,6 +20,7 @@ PROXY_MODE="$(read_env PROXY_MODE)"
 S3_ENDPOINT="$(read_env S3_ENDPOINT)"
 DATABASE_URL="$(read_env DATABASE_URL)"
 DOMAIN="$(read_env DOMAIN)"
+NEXT_PUBLIC_BASE_URL="$(read_env NEXT_PUBLIC_BASE_URL)"
 POSTGRES_VERSION="$(read_env POSTGRES_VERSION)"
 POSTGRES_VOLUME="$(read_env POSTGRES_VOLUME)"
 
@@ -258,22 +259,40 @@ cmd_setup() {
   echo "  ── Configuration ──"
   echo ""
 
-  prompt DOMAIN "Domain name (e.g. rallly.example.com)"
-  prompt INITIAL_ADMIN_EMAIL "Admin email (used to log in to the control panel)"
-  prompt SUPPORT_EMAIL "Support email shown to users" "$INITIAL_ADMIN_EMAIL"
-
-  echo ""
   echo "  ── Reverse Proxy ──"
   echo ""
   echo "  1) bundled  — Traefik on this host handles HTTPS (ports 80/443 required)"
   echo "  2) external — You already have a reverse proxy; publish web on a host port"
+  echo "  3) local    — No proxy, plain http on localhost (for trying Rallly out)"
   echo ""
-  prompt PROXY_CHOICE "Choose [1/2]" "1"
-  if [ "$PROXY_CHOICE" = "2" ]; then
-    PROXY_MODE=external
-    prompt WEB_PORT "Host port binding for web" "127.0.0.1:3000"
-  else
-    PROXY_MODE=bundled
+  prompt PROXY_CHOICE "Choose [1/2/3]" "1"
+
+  # Local mode is external mode with the base URL forced to plain http on
+  # loopback — there is no proxy in front to terminate TLS.
+  BASE_URL=""
+  case "$PROXY_CHOICE" in
+    3)
+      PROXY_MODE=external
+      prompt LOCAL_PORT "Port to serve on" "3000"
+      WEB_PORT="127.0.0.1:$LOCAL_PORT"
+      DOMAIN="localhost:$LOCAL_PORT"
+      BASE_URL="http://$DOMAIN"
+      ;;
+    2)
+      PROXY_MODE=external
+      prompt DOMAIN "Domain name (e.g. rallly.example.com)"
+      prompt WEB_PORT "Host port binding for web" "127.0.0.1:3000"
+      ;;
+    *)
+      PROXY_MODE=bundled
+      prompt DOMAIN "Domain name (e.g. rallly.example.com)"
+      ;;
+  esac
+
+  echo ""
+  prompt INITIAL_ADMIN_EMAIL "Admin email (used to log in to the control panel)"
+  prompt SUPPORT_EMAIL "Support email shown to users" "$INITIAL_ADMIN_EMAIL"
+  if [ "$PROXY_MODE" = "bundled" ]; then
     prompt ACME_EMAIL "Email for SSL certificates" "$INITIAL_ADMIN_EMAIL"
   fi
 
@@ -324,6 +343,13 @@ WEB_PORT=$WEB_PORT
 ENVEOF
     fi
 
+    # Only written for local mode; otherwise compose derives it from DOMAIN.
+    if [ -n "$BASE_URL" ]; then
+      cat <<ENVEOF
+NEXT_PUBLIC_BASE_URL=$BASE_URL
+ENVEOF
+    fi
+
     cat <<ENVEOF
 
 # ── App Settings ──
@@ -359,7 +385,7 @@ cmd_start() {
   ensure_postgres_pin
   docker compose up -d
   echo ""
-  echo "Rallly is starting at https://${DOMAIN:-localhost}"
+  echo "Rallly is starting at ${NEXT_PUBLIC_BASE_URL:-https://${DOMAIN:-localhost}}"
   echo "Run './rallly.sh logs' to watch startup progress."
   warn_postgres_eol
 }
