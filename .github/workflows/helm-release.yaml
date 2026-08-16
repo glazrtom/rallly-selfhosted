@@ -29,14 +29,6 @@ jobs:
         with:
           version: v3.15.0
 
-      # Publishes packaged charts to the gh-pages branch as a classic Helm
-      # repository index. Requires GitHub Pages enabled for this repo,
-      # serving from the gh-pages branch.
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.6.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-
       # Also push the same chart version as an OCI artifact, so it can be
       # installed with `helm install oci://ghcr.io/<org>/charts/rallly`
       # without relying on the gh-pages index.
