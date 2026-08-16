@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "rallly",
+  "type": "object",
+  "required": ["baseUrl", "supportEmail"],
+  "properties": {
+    "baseUrl": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^https?://",
+      "description": "Full public URL Rallly builds links against, e.g. https://rallly.example.com"
+    },
+    "supportEmail": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+      "description": "Email address shown to users for support inquiries"
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "postgresql": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "externalDatabase": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" }
+      }
+    },
+    "garage": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "externalS3": {
+      "type": "object",
+      "properties": {
+        "endpoint": { "type": "string" },
+        "bucketName": { "type": "string" },
+        "region": { "type": "string" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
+        },
+        "port": { "type": "integer" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    }
+  }
+}

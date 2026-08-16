@@ -1,0 +1,49 @@
+name: Release Helm chart
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "charts/**"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.0
+
+      # Publishes packaged charts to the gh-pages branch as a classic Helm
+      # repository index. Requires GitHub Pages enabled for this repo,
+      # serving from the gh-pages branch.
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      # Also push the same chart version as an OCI artifact, so it can be
+      # installed with `helm install oci://ghcr.io/<org>/charts/rallly`
+      # without relying on the gh-pages index.
+      - name: Push chart to GHCR (OCI)
+        run: |
+          set -e
+          version=$(grep '^version:' charts/rallly/Chart.yaml | awk '{print $2}')
+          helm package charts/rallly --destination /tmp/chart-package
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm push "/tmp/chart-package/rallly-${version}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"

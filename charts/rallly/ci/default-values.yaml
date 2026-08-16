@@ -1,0 +1,3 @@
+# Minimal values exercising the bundled Postgres + Garage defaults.
+baseUrl: https://rallly.example.com
+supportEmail: admin@example.com

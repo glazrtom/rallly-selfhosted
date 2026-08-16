@@ -1,5 +1,7 @@
 # Rallly Kubernetes Manifests
 
+> **Looking to deploy on Kubernetes?** Consider the [Helm chart](../charts/rallly) instead. It covers everything below plus object storage (bundled Garage or external S3), SMTP authentication, OIDC single sign-on, generated/rotatable secrets, housekeeping CronJobs, and configurable StorageClasses — all of which these plain manifests do not provide. This directory is kept for reference and for anyone who prefers to manage raw manifests directly.
+
 This directory contains base Kubernetes manifests to self-host Rallly. It separates configuration (ConfigMaps) from sensitive data (Secrets) and uses a StatefulSet for the PostgreSQL database.
 
 ## Prerequisites
