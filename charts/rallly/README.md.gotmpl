@@ -68,6 +68,32 @@ externalS3:
 
 `SECRET_PASSWORD`, the bundled Postgres password, the bundled Garage RPC secret and access keys, and `CRON_SECRET` are generated on first install if left blank, and **read back from the existing Secret on every subsequent `helm upgrade`** so they never change underneath a running deployment. Regenerating `SECRET_PASSWORD` invalidates all sessions; regenerating the Postgres/Garage credentials orphans existing data — set them explicitly in values (or via `existingSecret`) if you need to control them directly, e.g. for GitOps/ExternalSecrets workflows.
 
+Every secret the chart manages can instead be supplied from a pre-existing Secret, so the chart generates nothing:
+
+```yaml
+# App secret: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled),
+# and optionally SMTP_PWD / OIDC_CLIENT_SECRET.
+existingSecret: rallly-app
+
+postgresql:
+  # keys: POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
+  existingSecret: rallly-postgresql
+
+garage:
+  # keys: GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY
+  existingSecret: rallly-garage
+```
+
+> **⚠️ ArgoCD / GitOps users must set every secret explicitly via `existingSecret`.**
+> The self-generation behaviour relies on Helm's `lookup` function to read back the
+> previously generated values. ArgoCD (and any tool that renders with `helm template`)
+> has no live cluster access during rendering, so `lookup` returns empty on **every**
+> render and the chart mints **new random credentials each time**. That rotates the
+> Postgres/Garage passwords out from under the already-initialised data directories,
+> breaking authentication (`P1000` from Postgres), and churns the app `SECRET_PASSWORD`.
+> Supply externally-managed Secrets (e.g. Sealed Secrets / External Secrets) via the
+> `existingSecret` keys above so the values stay stable across renders.
+
 ## Single sign-on (OIDC)
 
 ```yaml

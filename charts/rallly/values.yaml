@@ -37,6 +37,9 @@ noreplyEmail: ""
 # -- Session encryption key, min 32 chars. Auto-generated and persisted across upgrades if left empty. Changing it invalidates all sessions.
 secretPassword: ""
 
+# -- Name of an existing Secret supplying the app credentials, instead of the chart-managed one. When set, the chart renders no app Secret and reads all app-level keys from it: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled), and optionally SMTP_PWD / OIDC_CLIENT_SECRET. Required for ArgoCD/GitOps — see README.
+existingSecret: ""
+
 # -- Comma-separated list of allowed email addresses/wildcards, e.g. "*@example.com". Empty allows all.
 allowedEmails: ""
 
@@ -99,6 +102,8 @@ postgresql:
   password: ""
   # -- Database name.
   database: rallly
+  # -- Name of an existing Secret supplying the bundled Postgres credentials, instead of the chart-managed one. When set, the chart renders no Postgres Secret and reads keys POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from it. Required for ArgoCD/GitOps — see README.
+  existingSecret: ""
   # -- Path the data volume is mounted at. postgres:18+ requires /var/lib/postgresql; older majors need /var/lib/postgresql/data.
   dataMountPath: /var/lib/postgresql
   persistence:
@@ -153,6 +158,8 @@ garage:
   secretAccessKey: ""
   # -- Default bucket created and used for uploads.
   bucketName: rallly
+  # -- Name of an existing Secret supplying the bundled Garage credentials, instead of the chart-managed one. When set, the chart renders no Garage Secret and reads keys GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY from it. Required for ArgoCD/GitOps — see README.
+  existingSecret: ""
   persistence:
     meta:
       # -- StorageClass for the Garage metadata volume.

@@ -68,6 +68,32 @@ externalS3:
 
 `SECRET_PASSWORD`, the bundled Postgres password, the bundled Garage RPC secret and access keys, and `CRON_SECRET` are generated on first install if left blank, and **read back from the existing Secret on every subsequent `helm upgrade`** so they never change underneath a running deployment. Regenerating `SECRET_PASSWORD` invalidates all sessions; regenerating the Postgres/Garage credentials orphans existing data — set them explicitly in values (or via `existingSecret`) if you need to control them directly, e.g. for GitOps/ExternalSecrets workflows.
 
+Every secret the chart manages can instead be supplied from a pre-existing Secret, so the chart generates nothing:
+
+```yaml
+# App secret: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled),
+# and optionally SMTP_PWD / OIDC_CLIENT_SECRET.
+existingSecret: rallly-app
+
+postgresql:
+  # keys: POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
+  existingSecret: rallly-postgresql
+
+garage:
+  # keys: GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY
+  existingSecret: rallly-garage
+```
+
+> **⚠️ ArgoCD / GitOps users must set every secret explicitly via `existingSecret`.**
+> The self-generation behaviour relies on Helm's `lookup` function to read back the
+> previously generated values. ArgoCD (and any tool that renders with `helm template`)
+> has no live cluster access during rendering, so `lookup` returns empty on **every**
+> render and the chart mints **new random credentials each time**. That rotates the
+> Postgres/Garage passwords out from under the already-initialised data directories,
+> breaking authentication (`P1000` from Postgres), and churns the app `SECRET_PASSWORD`.
+> Supply externally-managed Secrets (e.g. Sealed Secrets / External Secrets) via the
+> `existingSecret` keys above so the values stay stable across renders.
+
 ## Single sign-on (OIDC)
 
 ```yaml
@@ -106,6 +132,7 @@ If you're moving from this repository's plain `kubernetes/` manifests: they lack
 | containerSecurityContext.capabilities.drop | list | `["ALL"]` | Linux capabilities to drop. |
 | containerSecurityContext.readOnlyRootFilesystem | bool | `false` | Mount the root filesystem read-only. Left false: the Next.js standalone server writes to .next/cache at runtime. |
 | emailLogin.enabled | bool | `true` | Enable magic-link email login. Set to false to enforce SSO-only login. |
+| existingSecret | string | `""` | Name of an existing Secret supplying the app credentials, instead of the chart-managed one. When set, the chart renders no app Secret and reads all app-level keys from it: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled), and optionally SMTP_PWD / OIDC_CLIENT_SECRET. Required for ArgoCD/GitOps — see README. |
 | externalDatabase | object | `{"existingSecret":"","existingSecretKey":"DATABASE_URL","url":""}` | Full postgres:// connection URL. Used only when postgresql.enabled is false. |
 | externalDatabase.existingSecret | string | `""` | Name of an existing Secret containing the DATABASE_URL key, instead of a plain-text url. |
 | externalDatabase.existingSecretKey | string | `"DATABASE_URL"` | Key within existingSecret holding the connection URL. |
@@ -122,6 +149,7 @@ If you're moving from this repository's plain `kubernetes/` manifests: they lack
 | garage.accessKeyId | string | `""` | Garage/S3 access key. Auto-generated and persisted across upgrades if left empty. |
 | garage.bucketName | string | `"rallly"` | Default bucket created and used for uploads. |
 | garage.enabled | bool | `true` | Deploy a bundled single-node Garage StatefulSet for S3-compatible object storage. Set to false to use `externalS3`. |
+| garage.existingSecret | string | `""` | Name of an existing Secret supplying the bundled Garage credentials, instead of the chart-managed one. When set, the chart renders no Garage Secret and reads keys GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY from it. Required for ArgoCD/GitOps — see README. |
 | garage.image.registry | string | `"docker.io"` | Garage image registry |
 | garage.image.repository | string | `"dxflrs/garage"` | Garage image repository |
 | garage.image.tag | string | `"v2.3.0"` | Garage image tag |
@@ -178,6 +206,7 @@ If you're moving from this repository's plain `kubernetes/` manifests: they lack
 | postgresql.dataMountPath | string | `"/var/lib/postgresql"` | Path the data volume is mounted at. postgres:18+ requires /var/lib/postgresql; older majors need /var/lib/postgresql/data. |
 | postgresql.database | string | `"rallly"` | Database name. |
 | postgresql.enabled | bool | `true` | Deploy a bundled PostgreSQL StatefulSet. Set to false to use an external database via `externalDatabase`. |
+| postgresql.existingSecret | string | `""` | Name of an existing Secret supplying the bundled Postgres credentials, instead of the chart-managed one. When set, the chart renders no Postgres Secret and reads keys POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from it. Required for ArgoCD/GitOps — see README. |
 | postgresql.image.registry | string | `"docker.io"` | PostgreSQL image registry |
 | postgresql.image.repository | string | `"library/postgres"` | PostgreSQL image repository |
 | postgresql.image.tag | string | `"18-alpine"` | PostgreSQL image tag. 18 moved PGDATA to /var/lib/postgresql — see dataMountPath. |

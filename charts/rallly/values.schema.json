@@ -20,10 +20,12 @@
       "type": "integer",
       "minimum": 0
     },
+    "existingSecret": { "type": "string" },
     "postgresql": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": { "type": "boolean" },
+        "existingSecret": { "type": "string" }
       }
     },
     "externalDatabase": {
@@ -37,7 +39,8 @@
     "garage": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": { "type": "boolean" },
+        "existingSecret": { "type": "string" }
       }
     },
     "externalS3": {

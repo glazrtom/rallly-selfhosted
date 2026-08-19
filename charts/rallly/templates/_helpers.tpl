@@ -61,7 +61,7 @@ app.kubernetes.io/component: app
 {{- end }}
 
 {{- define "rallly.secretName" -}}
-{{ include "rallly.fullname" . }}
+{{- default (include "rallly.fullname" .) .Values.existingSecret -}}
 {{- end }}
 
 {{- define "rallly.configMapName" -}}
@@ -73,7 +73,7 @@ app.kubernetes.io/component: app
 {{- end }}
 
 {{- define "rallly.postgresql.secretName" -}}
-{{ include "rallly.postgresql.fullname" . }}
+{{- default (printf "%s-postgresql" (include "rallly.fullname" .)) .Values.postgresql.existingSecret -}}
 {{- end }}
 
 {{- define "rallly.garage.fullname" -}}
@@ -81,7 +81,7 @@ app.kubernetes.io/component: app
 {{- end }}
 
 {{- define "rallly.garage.secretName" -}}
-{{ include "rallly.garage.fullname" . }}
+{{- default (printf "%s-garage" (include "rallly.fullname" .)) .Values.garage.existingSecret -}}
 {{- end }}
 
 {{- define "rallly.garage.configMapName" -}}
