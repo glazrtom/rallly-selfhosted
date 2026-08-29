@@ -25,6 +25,7 @@ spec:
         fsGroup: 999
         runAsNonRoot: true
         runAsUser: 999
+      {{- $pgKeys := include "rallly.postgresql.secretKeys" . | fromYaml }}
       containers:
         - name: postgresql
           image: {{ include "rallly.image" (dict "image" .Values.postgresql.image "global" .Values.global) }}
@@ -34,10 +35,22 @@ spec:
             capabilities:
               drop:
                 - ALL
-          envFrom:
-            - secretRef:
-                name: {{ include "rallly.postgresql.secretName" . }}
           env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.postgresql.secretName" . }}
+                  key: {{ $pgKeys.username }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.postgresql.secretName" . }}
+                  key: {{ $pgKeys.password }}
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.postgresql.secretName" . }}
+                  key: {{ $pgKeys.database }}
             - name: PGDATA
               value: {{ printf "%s/pgdata" .Values.postgresql.dataMountPath }}
           ports:

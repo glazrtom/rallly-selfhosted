@@ -47,7 +47,7 @@ jobs:
       - name: Render and validate manifests
         run: |
           set -e
-          for values in default-values external-deps-values full-values; do
+          for values in default-values external-deps-values full-values existing-secret-values; do
             echo "== charts/rallly/ci/${values}.yaml =="
             helm template rallly charts/rallly -f "charts/rallly/ci/${values}.yaml" > "/tmp/${values}.rendered.yaml"
             kubeconform -strict -summary -kubernetes-version 1.29.0 "/tmp/${values}.rendered.yaml"

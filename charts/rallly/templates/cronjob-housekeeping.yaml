@@ -1,4 +1,5 @@
 {{- if .Values.housekeeping.enabled }}
+{{- $appKeys := include "rallly.secretKeys" . | fromYaml }}
 {{- range .Values.housekeeping.tasks }}
 apiVersion: batch/v1
 kind: CronJob
@@ -33,7 +34,7 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: {{ include "rallly.secretName" $ }}
-                      key: CRON_SECRET
+                      key: {{ $appKeys.cronSecret }}
               args:
                 - -fsS
                 - -H

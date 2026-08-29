@@ -25,6 +25,7 @@ spec:
       # entries (Config.User is unset, i.e. root) — matches docker-compose,
       # which also runs it unconstrained. There is no non-root UID to pin here
       # without the image publishing one.
+      {{- $garageKeys := include "rallly.garage.secretKeys" . | fromYaml }}
       containers:
         - name: garage
           image: {{ include "rallly.image" (dict "image" .Values.garage.image "global" .Values.global) }}
@@ -35,10 +36,22 @@ spec:
             capabilities:
               drop:
                 - ALL
-          envFrom:
-            - secretRef:
-                name: {{ include "rallly.garage.secretName" . }}
           env:
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.garage.secretName" . }}
+                  key: {{ $garageKeys.rpcSecret }}
+            - name: GARAGE_DEFAULT_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.garage.secretName" . }}
+                  key: {{ $garageKeys.accessKeyId }}
+            - name: GARAGE_DEFAULT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.garage.secretName" . }}
+                  key: {{ $garageKeys.secretAccessKey }}
             - name: GARAGE_DEFAULT_BUCKET
               value: {{ .Values.garage.bucketName | quote }}
           ports:

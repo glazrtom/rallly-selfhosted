@@ -14,12 +14,18 @@ A Helm chart for [Rallly](https://rallly.co), the open-source scheduling tool. F
 ```console
 helm install rallly charts/rallly \
   --set baseUrl=https://rallly.example.com \
-  --set supportEmail=admin@example.com
+  --set supportEmail=admin@example.com \
+  --set secretPassword=$(openssl rand -base64 32) \
+  --set housekeeping.cronSecret=$(openssl rand -base64 32) \
+  --set postgresql.password=$(openssl rand -base64 32) \
+  --set garage.rpcSecret=$(openssl rand -hex 32) \
+  --set garage.accessKeyId=$(openssl rand -hex 12) \
+  --set garage.secretAccessKey=$(openssl rand -hex 24)
 ```
 
-`baseUrl` and `supportEmail` are required — the chart fails fast via `values.schema.json` if either is missing.
+`baseUrl` and `supportEmail` are required — the chart fails fast via `values.schema.json` if either is missing. Every secret (see [Secrets](#secrets)) is required too — the chart never generates credentials, so it also fails fast if any are missing.
 
-This installs a bundled single-instance PostgreSQL and a bundled single-node Garage instance alongside the app. Generated credentials (`SECRET_PASSWORD`, database and object-storage passwords, `CRON_SECRET`) are created automatically on first install and preserved across `helm upgrade` — see [Generated secrets](#generated-secrets).
+This installs a bundled single-instance PostgreSQL and a bundled single-node Garage instance alongside the app.
 
 ## Storage classes and persistence
 
@@ -64,35 +70,78 @@ externalS3:
   # or: existingSecret: my-s3-secret (keys S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY)
 ```
 
-## Generated secrets
+## Secrets
 
-`SECRET_PASSWORD`, the bundled Postgres password, the bundled Garage RPC secret and access keys, and `CRON_SECRET` are generated on first install if left blank, and **read back from the existing Secret on every subsequent `helm upgrade`** so they never change underneath a running deployment. Regenerating `SECRET_PASSWORD` invalidates all sessions; regenerating the Postgres/Garage credentials orphans existing data — set them explicitly in values (or via `existingSecret`) if you need to control them directly, e.g. for GitOps/ExternalSecrets workflows.
-
-Every secret the chart manages can instead be supplied from a pre-existing Secret, so the chart generates nothing:
+The chart never generates credentials. For each of the three secret groups below, set **exactly one** of the inline value(s) or the matching `existingSecret` — never both, and never neither. `helm template`/`install`/`upgrade`/`lint` fail fast with a descriptive error otherwise. This makes rendering fully deterministic, which is required for ArgoCD and any other tool that renders with `helm template` (no live cluster access, so it cannot read back a previously generated value — ask it to mint one and it would mint a *different* one on every sync, rotating credentials out from under an already-initialised Postgres/Garage data directory and churning every session).
 
 ```yaml
-# App secret: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled),
-# and optionally SMTP_PWD / OIDC_CLIENT_SECRET.
-existingSecret: rallly-app
+# App secret: SECRET_PASSWORD (required), CRON_SECRET (required if
+# housekeeping.enabled), and optionally SMTP_PWD / OIDC_CLIENT_SECRET.
+secretPassword: "..."            # openssl rand -base64 32, min 32 chars
+housekeeping:
+  cronSecret: "..."              # openssl rand -base64 32
+# or, instead of both of the above:
+existingSecret: rallly-app       # keys: SECRET_PASSWORD, CRON_SECRET, optionally SMTP_PWD / OIDC_CLIENT_SECRET
 
 postgresql:
-  # keys: POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
-  existingSecret: rallly-postgresql
+  password: "..."                # openssl rand -base64 32
+  # or:
+  existingSecret: rallly-postgresql # (keys: POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB)
 
 garage:
-  # keys: GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY
-  existingSecret: rallly-garage
+  rpcSecret: "..."               # openssl rand -hex 32 — must be 64 lowercase hex chars
+  accessKeyId: "..."
+  secretAccessKey: "..."
+  # or
+  existingSecret: rallly-garage  # (keys: GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY)
 ```
 
-> **⚠️ ArgoCD / GitOps users must set every secret explicitly via `existingSecret`.**
-> The self-generation behaviour relies on Helm's `lookup` function to read back the
-> previously generated values. ArgoCD (and any tool that renders with `helm template`)
-> has no live cluster access during rendering, so `lookup` returns empty on **every**
-> render and the chart mints **new random credentials each time**. That rotates the
-> Postgres/Garage passwords out from under the already-initialised data directories,
-> breaking authentication (`P1000` from Postgres), and churns the app `SECRET_PASSWORD`.
-> Supply externally-managed Secrets (e.g. Sealed Secrets / External Secrets) via the
-> `existingSecret` keys above so the values stay stable across renders.
+`postgresql.*` is only validated when `postgresql.enabled`, and `garage.*` only when `garage.enabled` — an external database/object store doesn't need either. Sourcing all three groups from `existingSecret` values (e.g. populated by Sealed Secrets / External Secrets) is the recommended setup for GitOps.
+
+### Key names in an existing Secret
+
+If a pre-existing Secret doesn't use the chart's default key names (e.g. it comes from a Postgres operator, or External Secrets renamed the keys), point the chart at the real names with the matching `existingSecretKeys` map instead of duplicating the Secret:
+
+```yaml
+existingSecret: rallly-app
+existingSecretKeys:
+  secretPassword: SECRET_PASSWORD
+  cronSecret: CRON_SECRET
+  smtpPassword: SMTP_PWD
+  oidcClientSecret: OIDC_CLIENT_SECRET
+
+postgresql:
+  existingSecret: rallly-postgresql
+  existingSecretKeys:
+    username: POSTGRES_USER
+    password: POSTGRES_PASSWORD
+    database: POSTGRES_DB
+
+garage:
+  existingSecret: rallly-garage
+  existingSecretKeys:
+    rpcSecret: GARAGE_RPC_SECRET
+    accessKeyId: GARAGE_DEFAULT_ACCESS_KEY
+    secretAccessKey: GARAGE_DEFAULT_SECRET_KEY
+
+externalS3:
+  existingSecret: my-s3-secret
+  existingSecretKeys:
+    accessKeyId: S3_ACCESS_KEY_ID
+    secretAccessKey: S3_SECRET_ACCESS_KEY
+
+externalDatabase:
+  existingSecretKey: DATABASE_URL
+```
+
+Each `existingSecretKeys` map only applies when the matching `existingSecret` is set — it's ignored for a chart-managed Secret, which always writes the default names. You only need to set the keys you're renaming; the rest keep their defaults.
+
+> **Upgrading from a release created before this validation existed?** Copy the live values out of the existing Secrets before running `helm upgrade`, or point the `existingSecret` fields at them directly:
+> ```console
+> kubectl get secret <release>              -o jsonpath='{.data.SECRET_PASSWORD}'      | base64 -d
+> kubectl get secret <release>-postgresql   -o jsonpath='{.data.POSTGRES_PASSWORD}'    | base64 -d
+> kubectl get secret <release>-garage       -o jsonpath='{.data.GARAGE_RPC_SECRET}'    | base64 -d
+> ```
 
 ## Single sign-on (OIDC)
 

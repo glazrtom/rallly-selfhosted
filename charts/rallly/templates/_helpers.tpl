@@ -149,48 +149,80 @@ storageClassName: {{ $global | quote }}
 {{- end }}
 
 {{/*
-Look up an existing value at a JSON-pointer-ish path within a Secret's data,
-base64-decoded. Used to keep generated secrets stable across `helm upgrade`.
-Usage: include "rallly.existingSecretValue" (dict "context" $ "name" $secretName "key" "SOME_KEY")
+Resolve the app Secret's key names, letting existingSecretKeys override the
+canonical defaults. Only relevant when existingSecret is set — the
+chart-managed Secret always writes the canonical names.
+Usage: $keys := include "rallly.secretKeys" . | fromYaml
 */}}
-{{- define "rallly.existingSecretValue" -}}
-{{- $existing := lookup "v1" "Secret" .context.Release.Namespace .name -}}
-{{- if $existing -}}
-{{- index $existing.data .key | default "" | b64dec -}}
+{{- define "rallly.secretKeys" -}}
+{{- $defaults := dict "secretPassword" "SECRET_PASSWORD" "cronSecret" "CRON_SECRET" "smtpPassword" "SMTP_PWD" "oidcClientSecret" "OIDC_CLIENT_SECRET" -}}
+{{- toYaml (merge (deepCopy (.Values.existingSecretKeys | default dict)) $defaults) -}}
+{{- end }}
+
+{{/*
+Resolve the bundled-Postgres Secret's key names. See rallly.secretKeys.
+*/}}
+{{- define "rallly.postgresql.secretKeys" -}}
+{{- $defaults := dict "username" "POSTGRES_USER" "password" "POSTGRES_PASSWORD" "database" "POSTGRES_DB" -}}
+{{- toYaml (merge (deepCopy (.Values.postgresql.existingSecretKeys | default dict)) $defaults) -}}
+{{- end }}
+
+{{/*
+Resolve the bundled-Garage Secret's key names. See rallly.secretKeys.
+*/}}
+{{- define "rallly.garage.secretKeys" -}}
+{{- $defaults := dict "rpcSecret" "GARAGE_RPC_SECRET" "accessKeyId" "GARAGE_DEFAULT_ACCESS_KEY" "secretAccessKey" "GARAGE_DEFAULT_SECRET_KEY" -}}
+{{- toYaml (merge (deepCopy (.Values.garage.existingSecretKeys | default dict)) $defaults) -}}
+{{- end }}
+
+{{/*
+Resolve the external-S3 Secret's key names. See rallly.secretKeys.
+*/}}
+{{- define "rallly.externalS3.secretKeys" -}}
+{{- $defaults := dict "accessKeyId" "S3_ACCESS_KEY_ID" "secretAccessKey" "S3_SECRET_ACCESS_KEY" -}}
+{{- toYaml (merge (deepCopy (.Values.externalS3.existingSecretKeys | default dict)) $defaults) -}}
+{{- end }}
+
+{{/*
+Fail unless exactly one of an inline value and an existingSecret name is set.
+Usage: include "rallly.requireExactlyOne" (dict "group" "app" "valueName" "secretPassword" "value" .Values.secretPassword "existingName" "existingSecret" "existing" .Values.existingSecret)
+*/}}
+{{- define "rallly.requireExactlyOne" -}}
+{{- if and .value .existing -}}
+{{- fail (printf "%s: set only one of %s and %s, not both" .group .valueName .existingName) -}}
+{{- else if and (not .value) (not .existing) -}}
+{{- fail (printf "%s: set exactly one of %s or %s" .group .valueName .existingName) -}}
 {{- end -}}
 {{- end }}
 
 {{/*
-Resolve a generated secret value: explicit value > existing value in the live
-Secret > a freshly generated random string. Keeps values stable across
-`helm upgrade` without requiring the user to set anything.
-Usage: include "rallly.generateSecret" (dict "context" $ "value" .Values.foo "secretName" $secretName "key" "FOO" "length" 32)
+Validate that every enabled secret group has an explicit source (inline value
+or existingSecret) and that the values that must match a specific format do.
+Nothing is ever auto-generated, so this is the chart's only gate.
 */}}
-{{- define "rallly.generateSecret" -}}
-{{- $existing := include "rallly.existingSecretValue" (dict "context" .context "name" .secretName "key" .key) -}}
-{{- if .value -}}
-{{- .value -}}
-{{- else if $existing -}}
-{{- $existing -}}
-{{- else -}}
-{{- randAlphaNum (.length | default 32) -}}
+{{- define "rallly.validateSecrets" -}}
+{{- include "rallly.requireExactlyOne" (dict "group" "App secret" "valueName" "secretPassword" "value" .Values.secretPassword "existingName" "existingSecret" "existing" .Values.existingSecret) -}}
+{{- if and .Values.secretPassword (lt (len .Values.secretPassword) 32) -}}
+{{- fail "secretPassword must be at least 32 characters, e.g. generate one with: openssl rand -base64 32" -}}
 {{- end -}}
-{{- end }}
-
-{{/*
-Same as rallly.generateSecret, but the freshly-generated branch produces
-lowercase hex instead of alphanumeric. Garage's rpc_secret specifically
-requires N bytes of hex (2*N hex characters), not arbitrary alphanumerics.
-Usage: include "rallly.generateHexSecret" (dict "context" $ "value" ... "secretName" ... "key" ... "length" 64)
-*/}}
-{{- define "rallly.generateHexSecret" -}}
-{{- $existing := include "rallly.existingSecretValue" (dict "context" .context "name" .secretName "key" .key) -}}
-{{- if .value -}}
-{{- .value -}}
-{{- else if $existing -}}
-{{- $existing -}}
+{{- if .Values.housekeeping.enabled -}}
+{{- include "rallly.requireExactlyOne" (dict "group" "Housekeeping cron secret" "valueName" "housekeeping.cronSecret" "value" .Values.housekeeping.cronSecret "existingName" "existingSecret" "existing" .Values.existingSecret) -}}
+{{- end -}}
+{{- if .Values.postgresql.enabled -}}
+{{- include "rallly.requireExactlyOne" (dict "group" "Postgres credentials" "valueName" "postgresql.password" "value" .Values.postgresql.password "existingName" "postgresql.existingSecret" "existing" .Values.postgresql.existingSecret) -}}
+{{- end -}}
+{{- if .Values.garage.enabled -}}
+{{- $garageValuesSet := list .Values.garage.rpcSecret .Values.garage.accessKeyId .Values.garage.secretAccessKey | compact -}}
+{{- if and .Values.garage.existingSecret $garageValuesSet -}}
+{{- fail "Garage credentials: set only one of garage.rpcSecret/accessKeyId/secretAccessKey and garage.existingSecret, not both" -}}
+{{- else if .Values.garage.existingSecret -}}
+{{- else if eq (len $garageValuesSet) 3 -}}
+{{- if not (regexMatch "^[0-9a-f]{64}$" .Values.garage.rpcSecret) -}}
+{{- fail "garage.rpcSecret must be exactly 64 lowercase hex characters, e.g. generate one with: openssl rand -hex 32" -}}
+{{- end -}}
 {{- else -}}
-{{- randAlphaNum 40 | sha256sum | trunc (.length | default 64) -}}
+{{- fail "Garage credentials: set all of garage.rpcSecret, garage.accessKeyId and garage.secretAccessKey, or set garage.existingSecret" -}}
+{{- end -}}
 {{- end -}}
 {{- end }}
 

@@ -37,6 +37,7 @@ spec:
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
       {{- end }}
+      {{- $pgKeys := include "rallly.postgresql.secretKeys" . | fromYaml }}
       containers:
         - name: migrate
           image: {{ include "rallly.appImage" . }}
@@ -60,12 +61,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rallly.postgresql.secretName" . }}
-                  key: POSTGRES_USER
+                  key: {{ $pgKeys.username }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rallly.postgresql.secretName" . }}
-                  key: POSTGRES_PASSWORD
+                  key: {{ $pgKeys.password }}
             - name: DATABASE_URL
               value: {{ printf "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@%s:5432/%s" (include "rallly.postgresql.fullname" .) .Values.postgresql.database | quote }}
             {{- else if .Values.externalDatabase.existingSecret }}

@@ -50,6 +50,10 @@ spec:
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
       {{- end }}
+      {{- $appKeys := include "rallly.secretKeys" . | fromYaml }}
+      {{- $pgKeys := include "rallly.postgresql.secretKeys" . | fromYaml }}
+      {{- $garageKeys := include "rallly.garage.secretKeys" . | fromYaml }}
+      {{- $s3Keys := include "rallly.externalS3.secretKeys" . | fromYaml }}
       containers:
         - name: rallly
           image: {{ include "rallly.appImage" . }}
@@ -66,17 +70,36 @@ spec:
             - secretRef:
                 name: {{ include "rallly.secretName" . }}
           env:
+            {{- if .Values.existingSecret }}
+            - name: SECRET_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.secretName" . }}
+                  key: {{ $appKeys.secretPassword }}
+            - name: SMTP_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.secretName" . }}
+                  key: {{ $appKeys.smtpPassword }}
+                  optional: true
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.secretName" . }}
+                  key: {{ $appKeys.oidcClientSecret }}
+                  optional: true
+            {{- end }}
             {{- if .Values.postgresql.enabled }}
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rallly.postgresql.secretName" . }}
-                  key: POSTGRES_USER
+                  key: {{ $pgKeys.username }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rallly.postgresql.secretName" . }}
-                  key: POSTGRES_PASSWORD
+                  key: {{ $pgKeys.password }}
             - name: DATABASE_URL
               value: {{ printf "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@%s:5432/%s" (include "rallly.postgresql.fullname" .) .Values.postgresql.database | quote }}
             {{- else if .Values.externalDatabase.existingSecret }}
@@ -91,23 +114,23 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rallly.garage.secretName" . }}
-                  key: GARAGE_DEFAULT_ACCESS_KEY
+                  key: {{ $garageKeys.accessKeyId }}
             - name: S3_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "rallly.garage.secretName" . }}
-                  key: GARAGE_DEFAULT_SECRET_KEY
+                  key: {{ $garageKeys.secretAccessKey }}
             {{- else if and .Values.externalS3.endpoint .Values.externalS3.existingSecret }}
             - name: S3_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalS3.existingSecret }}
-                  key: S3_ACCESS_KEY_ID
+                  key: {{ $s3Keys.accessKeyId }}
             - name: S3_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.externalS3.existingSecret }}
-                  key: S3_SECRET_ACCESS_KEY
+                  key: {{ $s3Keys.secretAccessKey }}
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}

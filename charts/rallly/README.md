@@ -14,12 +14,18 @@ A Helm chart for [Rallly](https://rallly.co), the open-source scheduling tool. F
 ```console
 helm install rallly charts/rallly \
   --set baseUrl=https://rallly.example.com \
-  --set supportEmail=admin@example.com
+  --set supportEmail=admin@example.com \
+  --set secretPassword=$(openssl rand -base64 32) \
+  --set housekeeping.cronSecret=$(openssl rand -base64 32) \
+  --set postgresql.password=$(openssl rand -base64 32) \
+  --set garage.rpcSecret=$(openssl rand -hex 32) \
+  --set garage.accessKeyId=$(openssl rand -hex 12) \
+  --set garage.secretAccessKey=$(openssl rand -hex 24)
 ```
 
-`baseUrl` and `supportEmail` are required — the chart fails fast via `values.schema.json` if either is missing.
+`baseUrl` and `supportEmail` are required — the chart fails fast via `values.schema.json` if either is missing. Every secret (see [Secrets](#secrets)) is required too — the chart never generates credentials, so it also fails fast if any are missing.
 
-This installs a bundled single-instance PostgreSQL and a bundled single-node Garage instance alongside the app. Generated credentials (`SECRET_PASSWORD`, database and object-storage passwords, `CRON_SECRET`) are created automatically on first install and preserved across `helm upgrade` — see [Generated secrets](#generated-secrets).
+This installs a bundled single-instance PostgreSQL and a bundled single-node Garage instance alongside the app.
 
 ## Storage classes and persistence
 
@@ -64,35 +70,71 @@ externalS3:
   # or: existingSecret: my-s3-secret (keys S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY)
 ```
 
-## Generated secrets
+## Secrets
 
-`SECRET_PASSWORD`, the bundled Postgres password, the bundled Garage RPC secret and access keys, and `CRON_SECRET` are generated on first install if left blank, and **read back from the existing Secret on every subsequent `helm upgrade`** so they never change underneath a running deployment. Regenerating `SECRET_PASSWORD` invalidates all sessions; regenerating the Postgres/Garage credentials orphans existing data — set them explicitly in values (or via `existingSecret`) if you need to control them directly, e.g. for GitOps/ExternalSecrets workflows.
-
-Every secret the chart manages can instead be supplied from a pre-existing Secret, so the chart generates nothing:
+The chart never generates credentials. For each of the three secret groups below, set **exactly one** of the inline value(s) or the matching `existingSecret` — never both, and never neither. `helm template`/`install`/`upgrade`/`lint` fail fast with a descriptive error otherwise. This makes rendering fully deterministic, which is required for ArgoCD and any other tool that renders with `helm template` (no live cluster access, so it cannot read back a previously generated value — ask it to mint one and it would mint a *different* one on every sync, rotating credentials out from under an already-initialised Postgres/Garage data directory and churning every session).
 
 ```yaml
-# App secret: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled),
-# and optionally SMTP_PWD / OIDC_CLIENT_SECRET.
-existingSecret: rallly-app
+# App secret: SECRET_PASSWORD (required), CRON_SECRET (required if
+# housekeeping.enabled), and optionally SMTP_PWD / OIDC_CLIENT_SECRET.
+secretPassword: "..."            # openssl rand -base64 32, min 32 chars
+housekeeping:
+  cronSecret: "..."              # openssl rand -base64 32
+# or, instead of both of the above:
+existingSecret: rallly-app       # keys: SECRET_PASSWORD, CRON_SECRET, optionally SMTP_PWD / OIDC_CLIENT_SECRET
 
 postgresql:
-  # keys: POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
-  existingSecret: rallly-postgresql
+  password: "..."                # openssl rand -base64 32
+  # or:
+  existingSecret: rallly-postgresql # (keys: POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB)
 
 garage:
-  # keys: GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY
-  existingSecret: rallly-garage
+  rpcSecret: "..."               # openssl rand -hex 32 — must be 64 lowercase hex chars
+  accessKeyId: "..."
+  secretAccessKey: "..."
+  # or
+  existingSecret: rallly-garage  # (keys: GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY)
 ```
 
-> **⚠️ ArgoCD / GitOps users must set every secret explicitly via `existingSecret`.**
-> The self-generation behaviour relies on Helm's `lookup` function to read back the
-> previously generated values. ArgoCD (and any tool that renders with `helm template`)
-> has no live cluster access during rendering, so `lookup` returns empty on **every**
-> render and the chart mints **new random credentials each time**. That rotates the
-> Postgres/Garage passwords out from under the already-initialised data directories,
-> breaking authentication (`P1000` from Postgres), and churns the app `SECRET_PASSWORD`.
-> Supply externally-managed Secrets (e.g. Sealed Secrets / External Secrets) via the
-> `existingSecret` keys above so the values stay stable across renders.
+`postgresql.*` is only validated when `postgresql.enabled`, and `garage.*` only when `garage.enabled` — an external database/object store doesn't need either. Sourcing all three groups from `existingSecret` values (e.g. populated by Sealed Secrets / External Secrets) is the recommended setup for GitOps.
+
+### Key names in an existing Secret
+
+If a pre-existing Secret doesn't use the chart's default key names (e.g. it comes from a Postgres operator, or External Secrets renamed the keys), point the chart at the real names with the matching `existingSecretKeys` map instead of duplicating the Secret:
+
+```yaml
+existingSecret: rallly-app
+existingSecretKeys:
+  secretPassword: SECRET_PASSWORD
+  cronSecret: CRON_SECRET
+  smtpPassword: SMTP_PWD
+  oidcClientSecret: OIDC_CLIENT_SECRET
+
+postgresql:
+  existingSecret: rallly-postgresql
+  existingSecretKeys:
+    username: POSTGRES_USER
+    password: POSTGRES_PASSWORD
+    database: POSTGRES_DB
+
+garage:
+  existingSecret: rallly-garage
+  existingSecretKeys:
+    rpcSecret: GARAGE_RPC_SECRET
+    accessKeyId: GARAGE_DEFAULT_ACCESS_KEY
+    secretAccessKey: GARAGE_DEFAULT_SECRET_KEY
+
+externalS3:
+  existingSecret: my-s3-secret
+  existingSecretKeys:
+    accessKeyId: S3_ACCESS_KEY_ID
+    secretAccessKey: S3_SECRET_ACCESS_KEY
+
+externalDatabase:
+  existingSecretKey: DATABASE_URL
+```
+
+Each `existingSecretKeys` map only applies when the matching `existingSecret` is set — it's ignored for a chart-managed Secret, which always writes the default names. You only need to set the keys you're renaming; the rest keep their defaults.
 
 ## Single sign-on (OIDC)
 
@@ -132,24 +174,36 @@ If you're moving from this repository's plain `kubernetes/` manifests: they lack
 | containerSecurityContext.capabilities.drop | list | `["ALL"]` | Linux capabilities to drop. |
 | containerSecurityContext.readOnlyRootFilesystem | bool | `false` | Mount the root filesystem read-only. Left false: the Next.js standalone server writes to .next/cache at runtime. |
 | emailLogin.enabled | bool | `true` | Enable magic-link email login. Set to false to enforce SSO-only login. |
-| existingSecret | string | `""` | Name of an existing Secret supplying the app credentials, instead of the chart-managed one. When set, the chart renders no app Secret and reads all app-level keys from it: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled), and optionally SMTP_PWD / OIDC_CLIENT_SECRET. Required for ArgoCD/GitOps — see README. |
+| existingSecret | string | `""` | Name of an existing Secret supplying the app credentials, instead of secretPassword/housekeeping.cronSecret. Set exactly one of secretPassword or existingSecret, never both. When set, the chart renders no app Secret and reads all app-level keys from it: SECRET_PASSWORD, CRON_SECRET (if housekeeping enabled), and optionally SMTP_PWD / OIDC_CLIENT_SECRET. See README. |
+| existingSecretKeys | object | `{"cronSecret":"CRON_SECRET","oidcClientSecret":"OIDC_CLIENT_SECRET","secretPassword":"SECRET_PASSWORD","smtpPassword":"SMTP_PWD"}` | Key names to read within existingSecret, if your Secret doesn't use the chart's default names. Only relevant when existingSecret is set. |
+| existingSecretKeys.cronSecret | string | `"CRON_SECRET"` | Key holding the housekeeping bearer token. |
+| existingSecretKeys.oidcClientSecret | string | `"OIDC_CLIENT_SECRET"` | Key holding the OIDC client secret. |
+| existingSecretKeys.secretPassword | string | `"SECRET_PASSWORD"` | Key holding the session encryption key. |
+| existingSecretKeys.smtpPassword | string | `"SMTP_PWD"` | Key holding the SMTP password. |
 | externalDatabase | object | `{"existingSecret":"","existingSecretKey":"DATABASE_URL","url":""}` | Full postgres:// connection URL. Used only when postgresql.enabled is false. |
 | externalDatabase.existingSecret | string | `""` | Name of an existing Secret containing the DATABASE_URL key, instead of a plain-text url. |
 | externalDatabase.existingSecretKey | string | `"DATABASE_URL"` | Key within existingSecret holding the connection URL. |
-| externalS3 | object | `{"accessKeyId":"","bucketName":"","endpoint":"","existingSecret":"","region":"","secretAccessKey":""}` | S3 endpoint URL, e.g. https://s3.amazonaws.com or https://<account>.r2.cloudflarestorage.com. Used only when garage.enabled is false. |
+| externalS3 | object | `{"accessKeyId":"","bucketName":"","endpoint":"","existingSecret":"","existingSecretKeys":{"accessKeyId":"S3_ACCESS_KEY_ID","secretAccessKey":"S3_SECRET_ACCESS_KEY"},"region":"","secretAccessKey":""}` | S3 endpoint URL, e.g. https://s3.amazonaws.com or https://<account>.r2.cloudflarestorage.com. Used only when garage.enabled is false. |
 | externalS3.accessKeyId | string | `""` | S3 access key ID. |
 | externalS3.bucketName | string | `""` | S3 bucket name. |
 | externalS3.existingSecret | string | `""` | Name of an existing Secret containing S3 credentials, instead of plain-text keys. |
+| externalS3.existingSecretKeys | object | `{"accessKeyId":"S3_ACCESS_KEY_ID","secretAccessKey":"S3_SECRET_ACCESS_KEY"}` | Key names to read within externalS3.existingSecret, if your Secret doesn't use the chart's default names. Only relevant when externalS3.existingSecret is set. |
+| externalS3.existingSecretKeys.accessKeyId | string | `"S3_ACCESS_KEY_ID"` | Key holding the S3 access key ID. |
+| externalS3.existingSecretKeys.secretAccessKey | string | `"S3_SECRET_ACCESS_KEY"` | Key holding the S3 secret access key. |
 | externalS3.region | string | `""` | S3 region. |
 | externalS3.secretAccessKey | string | `""` | S3 secret access key. Stored in the app Secret. |
 | extraEnv | list | `[]` | Extra environment variables for the app container, e.g. KV_REST_API_URL/KV_REST_API_TOKEN, branding vars, MODERATION_*, NEXT_PUBLIC_CDN_BASE_URL. Accepts the full corev1 EnvVar schema. |
 | extraManifests | list | `[]` | Extra raw Kubernetes manifests to install alongside the chart. |
 | extraVolumeMounts | list | `[]` | Extra volume mounts for the app container. |
 | extraVolumes | list | `[]` | Extra volumes for the app pod. |
-| garage.accessKeyId | string | `""` | Garage/S3 access key. Auto-generated and persisted across upgrades if left empty. |
+| garage.accessKeyId | string | `""` | Garage/S3 access key. Required, along with rpcSecret and secretAccessKey, unless garage.existingSecret is set. |
 | garage.bucketName | string | `"rallly"` | Default bucket created and used for uploads. |
 | garage.enabled | bool | `true` | Deploy a bundled single-node Garage StatefulSet for S3-compatible object storage. Set to false to use `externalS3`. |
-| garage.existingSecret | string | `""` | Name of an existing Secret supplying the bundled Garage credentials, instead of the chart-managed one. When set, the chart renders no Garage Secret and reads keys GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY from it. Required for ArgoCD/GitOps — see README. |
+| garage.existingSecret | string | `""` | Name of an existing Secret supplying the bundled Garage credentials, instead of rpcSecret/accessKeyId/secretAccessKey. Set exactly one of those three or garage.existingSecret, never both. When set, the chart renders no Garage Secret and reads keys GARAGE_RPC_SECRET / GARAGE_DEFAULT_ACCESS_KEY / GARAGE_DEFAULT_SECRET_KEY from it. See README. |
+| garage.existingSecretKeys | object | `{"accessKeyId":"GARAGE_DEFAULT_ACCESS_KEY","rpcSecret":"GARAGE_RPC_SECRET","secretAccessKey":"GARAGE_DEFAULT_SECRET_KEY"}` | Key names to read within garage.existingSecret, if your Secret doesn't use the chart's default names. Only relevant when garage.existingSecret is set. |
+| garage.existingSecretKeys.accessKeyId | string | `"GARAGE_DEFAULT_ACCESS_KEY"` | Key holding the Garage/S3 access key. |
+| garage.existingSecretKeys.rpcSecret | string | `"GARAGE_RPC_SECRET"` | Key holding the Garage inter-node RPC secret. |
+| garage.existingSecretKeys.secretAccessKey | string | `"GARAGE_DEFAULT_SECRET_KEY"` | Key holding the Garage/S3 secret key. |
 | garage.image.registry | string | `"docker.io"` | Garage image registry |
 | garage.image.repository | string | `"dxflrs/garage"` | Garage image repository |
 | garage.image.tag | string | `"v2.3.0"` | Garage image tag |
@@ -161,12 +215,12 @@ If you're moving from this repository's plain `kubernetes/` manifests: they lack
 | garage.persistence.meta.storageClass | string | `""` | StorageClass for the Garage metadata volume. |
 | garage.resources.limits | object | `{"cpu":"1","memory":"512Mi"}` | Resource limits for the Garage container. |
 | garage.resources.requests | object | `{"cpu":"100m","memory":"128Mi"}` | Resource requests for the Garage container. |
-| garage.rpcSecret | string | `""` | Garage inter-node RPC secret: 64 lowercase hex characters (32 bytes). Auto-generated and persisted across upgrades if left empty. |
-| garage.secretAccessKey | string | `""` | Garage/S3 secret key. Auto-generated and persisted across upgrades if left empty. |
+| garage.rpcSecret | string | `""` | Garage inter-node RPC secret: 64 lowercase hex characters (32 bytes). Required, along with accessKeyId and secretAccessKey, unless garage.existingSecret is set — generate one with: openssl rand -hex 32. |
+| garage.secretAccessKey | string | `""` | Garage/S3 secret key. Required, along with rpcSecret and accessKeyId, unless garage.existingSecret is set. |
 | global.imagePullSecrets | list | `[]` | Global list of imagePullSecrets, merged with image-specific ones. |
 | global.imageRegistry | string | `""` | Global override for all image registries below. |
 | global.storageClass | string | `""` | Default StorageClass for all bundled volumes (Postgres data, Garage meta/data). "" uses the cluster default. "-" disables dynamic provisioning (storageClassName: ""). Overridable per-volume below. |
-| housekeeping.cronSecret | string | `""` | Bearer token required by /api/house-keeping/* endpoints. Auto-generated and persisted across upgrades if left empty. |
+| housekeeping.cronSecret | string | `""` | Bearer token required by /api/house-keeping/* endpoints. Required unless existingSecret is set — generate one with: openssl rand -base64 32. |
 | housekeeping.enabled | bool | `true` | Run scheduled housekeeping CronJobs (auto-close polls, delete inactive/soft-deleted polls and users). These tasks DELETE data on a retention schedule — review `housekeeping.tasks` before enabling on data you want to keep indefinitely. |
 | housekeeping.image.registry | string | `"docker.io"` | curl image registry used to call the housekeeping endpoints. |
 | housekeeping.image.repository | string | `"curlimages/curl"` | curl image repository. |
@@ -206,11 +260,15 @@ If you're moving from this repository's plain `kubernetes/` manifests: they lack
 | postgresql.dataMountPath | string | `"/var/lib/postgresql"` | Path the data volume is mounted at. postgres:18+ requires /var/lib/postgresql; older majors need /var/lib/postgresql/data. |
 | postgresql.database | string | `"rallly"` | Database name. |
 | postgresql.enabled | bool | `true` | Deploy a bundled PostgreSQL StatefulSet. Set to false to use an external database via `externalDatabase`. |
-| postgresql.existingSecret | string | `""` | Name of an existing Secret supplying the bundled Postgres credentials, instead of the chart-managed one. When set, the chart renders no Postgres Secret and reads keys POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from it. Required for ArgoCD/GitOps — see README. |
+| postgresql.existingSecret | string | `""` | Name of an existing Secret supplying the bundled Postgres credentials, instead of postgresql.password. Set exactly one of postgresql.password or postgresql.existingSecret, never both. When set, the chart renders no Postgres Secret and reads keys POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from it. See README. |
+| postgresql.existingSecretKeys | object | `{"database":"POSTGRES_DB","password":"POSTGRES_PASSWORD","username":"POSTGRES_USER"}` | Key names to read within postgresql.existingSecret, if your Secret doesn't use the chart's default names. Only relevant when postgresql.existingSecret is set. |
+| postgresql.existingSecretKeys.database | string | `"POSTGRES_DB"` | Key holding the database name. |
+| postgresql.existingSecretKeys.password | string | `"POSTGRES_PASSWORD"` | Key holding the database password. |
+| postgresql.existingSecretKeys.username | string | `"POSTGRES_USER"` | Key holding the database username. |
 | postgresql.image.registry | string | `"docker.io"` | PostgreSQL image registry |
 | postgresql.image.repository | string | `"library/postgres"` | PostgreSQL image repository |
 | postgresql.image.tag | string | `"18-alpine"` | PostgreSQL image tag. 18 moved PGDATA to /var/lib/postgresql — see dataMountPath. |
-| postgresql.password | string | `""` | Database password. Auto-generated and persisted across upgrades if left empty. |
+| postgresql.password | string | `""` | Database password. Required unless postgresql.existingSecret is set — generate one with: openssl rand -base64 32. |
 | postgresql.persistence.accessModes | list | `["ReadWriteOnce"]` | Access modes for the Postgres data volume. |
 | postgresql.persistence.annotations | object | `{}` | Extra annotations for the PVC. |
 | postgresql.persistence.enabled | bool | `true` | Use a PersistentVolumeClaim for Postgres data. Disabling loses all data on pod restart. |
@@ -230,7 +288,7 @@ If you're moving from this repository's plain `kubernetes/` manifests: they lack
 | registration.enabled | bool | `true` | Allow new user registration. |
 | replicaCount | int | `1` | Number of Rallly pods. Rate limiting is in-memory per pod unless `extraEnv` sets KV_REST_API_URL/KV_REST_API_TOKEN (Upstash Redis) — see kv.md in README. |
 | resources | object | `{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"200m","memory":"512Mi"}}` | Resource requests/limits for the app container. |
-| secretPassword | string | `""` | Session encryption key, min 32 chars. Auto-generated and persisted across upgrades if left empty. Changing it invalidates all sessions. |
+| secretPassword | string | `""` | Session encryption key, min 32 chars. Required unless existingSecret is set — generate one with: openssl rand -base64 32. Changing it invalidates all sessions. |
 | service.port | int | `80` | Service port. |
 | service.type | string | `"ClusterIP"` | Kubernetes Service type for the app. |
 | serviceAccount.annotations | object | `{}` | Extra annotations for the ServiceAccount. |

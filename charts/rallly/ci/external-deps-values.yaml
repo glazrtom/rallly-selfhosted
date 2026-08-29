@@ -2,6 +2,11 @@
 baseUrl: https://rallly.example.com
 supportEmail: admin@example.com
 
+secretPassword: "ci-secret-password-must-be-at-least-32-chars"
+
+housekeeping:
+  cronSecret: "ci-cron-secret-must-be-at-least-32-chars"
+
 postgresql:
   enabled: false
 
