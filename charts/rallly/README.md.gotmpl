@@ -136,13 +136,6 @@ externalDatabase:
 
 Each `existingSecretKeys` map only applies when the matching `existingSecret` is set — it's ignored for a chart-managed Secret, which always writes the default names. You only need to set the keys you're renaming; the rest keep their defaults.
 
-> **Upgrading from a release created before this validation existed?** Copy the live values out of the existing Secrets before running `helm upgrade`, or point the `existingSecret` fields at them directly:
-> ```console
-> kubectl get secret <release>              -o jsonpath='{.data.SECRET_PASSWORD}'      | base64 -d
-> kubectl get secret <release>-postgresql   -o jsonpath='{.data.POSTGRES_PASSWORD}'    | base64 -d
-> kubectl get secret <release>-garage       -o jsonpath='{.data.GARAGE_RPC_SECRET}'    | base64 -d
-> ```
-
 ## Single sign-on (OIDC)
 
 ```yaml
