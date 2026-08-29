@@ -16,4 +16,5 @@
 *.tmproj
 .vscode/
 ci/
+tests/
 README.md.gotmpl
