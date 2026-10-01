@@ -111,7 +111,7 @@ postgresql:
   username: rallly
   # -- Database password. Required unless postgresql.existingSecret is set — generate one with: openssl rand -base64 32.
   password: ""
-  # -- Database name.
+  # -- Database name. Ignored when postgresql.existingSecret is set — the name is read from that Secret instead.
   database: rallly
   # -- Name of an existing Secret supplying the bundled Postgres credentials, instead of postgresql.password. Set exactly one of postgresql.password or postgresql.existingSecret, never both. When set, the chart renders no Postgres Secret and reads keys POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from it. See README.
   existingSecret: ""

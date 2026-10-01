@@ -254,7 +254,7 @@ Rallly's hosted service runs four maintenance tasks on a schedule (auto-close po
 | podSecurityContext.runAsNonRoot | bool | `true` | Require the pod to run as non-root. |
 | podSecurityContext.runAsUser | int | `100` | UID to run as. Matches the image's built-in `nextjs` user. |
 | postgresql.dataMountPath | string | `"/var/lib/postgresql"` | Path the data volume is mounted at. postgres:18+ requires /var/lib/postgresql; older majors need /var/lib/postgresql/data. |
-| postgresql.database | string | `"rallly"` | Database name. |
+| postgresql.database | string | `"rallly"` | Database name. Ignored when postgresql.existingSecret is set — the name is read from that Secret instead. |
 | postgresql.enabled | bool | `true` | Deploy a bundled PostgreSQL StatefulSet. Set to false to use an external database via `externalDatabase`. |
 | postgresql.existingSecret | string | `""` | Name of an existing Secret supplying the bundled Postgres credentials, instead of postgresql.password. Set exactly one of postgresql.password or postgresql.existingSecret, never both. When set, the chart renders no Postgres Secret and reads keys POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from it. See README. |
 | postgresql.existingSecretKeys | object | `{"database":"POSTGRES_DB","password":"POSTGRES_PASSWORD","username":"POSTGRES_USER"}` | Key names to read within postgresql.existingSecret, if your Secret doesn't use the chart's default names. Only relevant when postgresql.existingSecret is set. |

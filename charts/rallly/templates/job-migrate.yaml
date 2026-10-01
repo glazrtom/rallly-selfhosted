@@ -67,8 +67,13 @@ spec:
                 secretKeyRef:
                   name: {{ include "rallly.postgresql.secretName" . }}
                   key: {{ $pgKeys.password }}
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rallly.postgresql.secretName" . }}
+                  key: {{ $pgKeys.database }}
             - name: DATABASE_URL
-              value: {{ printf "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@%s:5432/%s" (include "rallly.postgresql.fullname" .) .Values.postgresql.database | quote }}
+              value: {{ printf "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@%s:5432/$(POSTGRES_DB)" (include "rallly.postgresql.fullname" .) | quote }}
             {{- else if .Values.externalDatabase.existingSecret }}
             - name: DATABASE_URL
               valueFrom:
