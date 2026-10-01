@@ -99,6 +99,32 @@ jobs:
             echo "app_version=$app_version"
           } >> "$GITHUB_OUTPUT"
 
+      # Log in before the published-version check: a private package can't be
+      # read anonymously, which would make every version look unpublished.
+      - name: Log in to registry
+        if: inputs.dry_run != true
+        env:
+          REGISTRY: ${{ steps.cfg.outputs.registry }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          set -e
+
+          if [ -n "$REGISTRY_PASSWORD" ]; then
+            login_user="$REGISTRY_USERNAME"
+            login_pass="$REGISTRY_PASSWORD"
+          elif [ "$REGISTRY" = "ghcr.io" ]; then
+            login_user="$GH_ACTOR"
+            login_pass="$GH_TOKEN"
+          else
+            echo "::error::No REGISTRY_USERNAME/REGISTRY_PASSWORD secrets configured for non-GHCR registry '$REGISTRY'. Refusing to send GITHUB_TOKEN to a third-party host." >&2
+            exit 1
+          fi
+
+          echo "$login_pass" | helm registry login "$REGISTRY" -u "$login_user" --password-stdin
+
       - name: Skip if version already published
         if: github.event_name == 'push'
         id: guard
@@ -144,25 +170,9 @@ jobs:
           REGISTRY: ${{ steps.cfg.outputs.registry }}
           REPOSITORY: ${{ steps.cfg.outputs.repository }}
           VERSION: ${{ steps.cfg.outputs.version }}
-          GH_ACTOR: ${{ github.actor }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
-          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
         run: |
           set -e
 
-          if [ -n "$REGISTRY_PASSWORD" ]; then
-            login_user="$REGISTRY_USERNAME"
-            login_pass="$REGISTRY_PASSWORD"
-          elif [ "$REGISTRY" = "ghcr.io" ]; then
-            login_user="$GH_ACTOR"
-            login_pass="$GH_TOKEN"
-          else
-            echo "::error::No REGISTRY_USERNAME/REGISTRY_PASSWORD secrets configured for non-GHCR registry '$REGISTRY'. Refusing to send GITHUB_TOKEN to a third-party host." >&2
-            exit 1
-          fi
-
-          echo "$login_pass" | helm registry login "$REGISTRY" -u "$login_user" --password-stdin
           helm push "$RUNNER_TEMP/chart-package/rallly-${VERSION}.tgz" "oci://${REGISTRY}/${REPOSITORY}"
 
           {
