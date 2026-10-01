@@ -27,12 +27,6 @@ Database: {{ if .Values.postgresql.enabled }}bundled PostgreSQL ({{ .Values.post
 Object storage: {{ if .Values.garage.enabled }}bundled Garage ({{ .Values.garage.image.tag }}){{ else if .Values.externalS3.endpoint }}external ({{ .Values.externalS3.endpoint }}){{ else }}NOT CONFIGURED — file uploads and avatars will fail{{ end }}
 Housekeeping CronJobs: {{ if .Values.housekeeping.enabled }}enabled ({{ len .Values.housekeeping.tasks }} scheduled tasks){{ else }}disabled{{ end }}
 
-{{- if and (not .Values.postgresql.enabled) (not .Values.externalDatabase.url) (not .Values.externalDatabase.existingSecret) }}
-
-WARNING: postgresql.enabled is false but no externalDatabase.url or
-externalDatabase.existingSecret was provided. The app will fail to start.
-{{- end }}
-
 {{- if and (not .Values.garage.enabled) (not .Values.externalS3.endpoint) }}
 
 WARNING: garage.enabled is false but no externalS3.endpoint was provided.

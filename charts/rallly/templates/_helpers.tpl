@@ -210,6 +210,8 @@ Nothing is ever auto-generated, so this is the chart's only gate.
 {{- end -}}
 {{- if .Values.postgresql.enabled -}}
 {{- include "rallly.requireExactlyOne" (dict "group" "Postgres credentials" "valueName" "postgresql.password" "value" .Values.postgresql.password "existingName" "postgresql.existingSecret" "existing" .Values.postgresql.existingSecret) -}}
+{{- else if and (not .Values.externalDatabase.url) (not .Values.externalDatabase.existingSecret) -}}
+{{- fail "External database: postgresql.enabled is false, so set externalDatabase.url or externalDatabase.existingSecret" -}}
 {{- end -}}
 {{- if .Values.garage.enabled -}}
 {{- $garageValuesSet := list .Values.garage.rpcSecret .Values.garage.accessKeyId .Values.garage.secretAccessKey | compact -}}
