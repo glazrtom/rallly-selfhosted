@@ -72,7 +72,7 @@ externalS3:
 
 ## Secrets
 
-The chart never generates credentials. For each of the three secret groups below, set **exactly one** of the inline value(s) or the matching `existingSecret` — never both, and never neither. `helm template`/`install`/`upgrade`/`lint` fail fast with a descriptive error otherwise. This makes rendering fully deterministic, which is required for ArgoCD and any other tool that renders with `helm template`.
+The chart never generates credentials. For each of the three secret groups below, set **exactly one** of the inline value(s) or the matching `existingSecret` — never both, and never neither. `helm template`/`install`/`upgrade` fail fast with a descriptive error otherwise. This makes rendering fully deterministic, which is required for ArgoCD and any other tool that renders with `helm template`.
 
 ```yaml
 # App secret: SECRET_PASSWORD (required), CRON_SECRET (required if
