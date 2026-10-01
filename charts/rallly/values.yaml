@@ -149,10 +149,10 @@ postgresql:
       cpu: 250m
       memory: 512Mi
 
-# -- Full postgres:// connection URL. Used only when postgresql.enabled is false.
+# -- Full postgres:// connection URL. Used only when postgresql.enabled is false. Set exactly one of url or existingSecret, never both.
 externalDatabase:
   url: ""
-  # -- Name of an existing Secret containing the DATABASE_URL key, instead of a plain-text url.
+  # -- Name of an existing Secret containing the DATABASE_URL key, instead of a plain-text url. Set exactly one of url or existingSecret, never both.
   existingSecret: ""
   # -- Key within existingSecret holding the connection URL.
   existingSecretKey: "DATABASE_URL"

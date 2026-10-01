@@ -176,8 +176,8 @@ Rallly's hosted service runs four maintenance tasks on a schedule (auto-close po
 | existingSecretKeys.oidcClientSecret | string | `"OIDC_CLIENT_SECRET"` | Key holding the OIDC client secret. |
 | existingSecretKeys.secretPassword | string | `"SECRET_PASSWORD"` | Key holding the session encryption key. |
 | existingSecretKeys.smtpPassword | string | `"SMTP_PWD"` | Key holding the SMTP password. |
-| externalDatabase | object | `{"existingSecret":"","existingSecretKey":"DATABASE_URL","url":""}` | Full postgres:// connection URL. Used only when postgresql.enabled is false. |
-| externalDatabase.existingSecret | string | `""` | Name of an existing Secret containing the DATABASE_URL key, instead of a plain-text url. |
+| externalDatabase | object | `{"existingSecret":"","existingSecretKey":"DATABASE_URL","url":""}` | Full postgres:// connection URL. Used only when postgresql.enabled is false. Set exactly one of url or existingSecret, never both. |
+| externalDatabase.existingSecret | string | `""` | Name of an existing Secret containing the DATABASE_URL key, instead of a plain-text url. Set exactly one of url or existingSecret, never both. |
 | externalDatabase.existingSecretKey | string | `"DATABASE_URL"` | Key within existingSecret holding the connection URL. |
 | externalS3 | object | `{"accessKeyId":"","bucketName":"","endpoint":"","existingSecret":"","existingSecretKeys":{"accessKeyId":"S3_ACCESS_KEY_ID","secretAccessKey":"S3_SECRET_ACCESS_KEY"},"region":"","secretAccessKey":""}` | S3 endpoint URL, e.g. https://s3.amazonaws.com or https://<account>.r2.cloudflarestorage.com. Used only when garage.enabled is false. |
 | externalS3.accessKeyId | string | `""` | S3 access key ID. |
