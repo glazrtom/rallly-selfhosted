@@ -21,6 +21,7 @@ spec:
             {{- include "rallly.selectorLabels" $ | nindent 12 }}
         spec:
           restartPolicy: OnFailure
+          {{- include "rallly.imagePullSecrets" $ | nindent 10 }}
           securityContext:
             {{- toYaml $.Values.podSecurityContext | nindent 12 }}
           containers:
