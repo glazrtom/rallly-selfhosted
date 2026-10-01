@@ -1,6 +1,6 @@
 # rallly
 
-A Helm chart for [Rallly](https://rallly.co), the open-source scheduling tool. Feature-equivalent with the project's `docker-compose.yml` self-hosting stack: bundled PostgreSQL, bundled [Garage](https://garagehq.deuxfleurs.fr/) S3-compatible object storage, SMTP, OIDC single sign-on, and the housekeeping tasks that run on cron for rallly.co but are otherwise absent from a self-hosted install.
+A Helm chart for [Rallly](https://rallly.co), the open-source scheduling tool. Feature-equivalent with the project's `docker-compose.yml` self-hosting stack: bundled PostgreSQL, bundled [Garage](https://garagehq.deuxfleurs.fr/) S3-compatible object storage, SMTP, OIDC single sign-on, and the housekeeping tasks that run on cron for rallly.co.
 
 ## Prerequisites
 
@@ -72,7 +72,7 @@ externalS3:
 
 ## Secrets
 
-The chart never generates credentials. For each of the three secret groups below, set **exactly one** of the inline value(s) or the matching `existingSecret` — never both, and never neither. `helm template`/`install`/`upgrade`/`lint` fail fast with a descriptive error otherwise. This makes rendering fully deterministic, which is required for ArgoCD and any other tool that renders with `helm template` (no live cluster access, so it cannot read back a previously generated value — ask it to mint one and it would mint a *different* one on every sync, rotating credentials out from under an already-initialised Postgres/Garage data directory and churning every session).
+The chart never generates credentials. For each of the three secret groups below, set **exactly one** of the inline value(s) or the matching `existingSecret` — never both, and never neither. `helm template`/`install`/`upgrade`/`lint` fail fast with a descriptive error otherwise. This makes rendering fully deterministic, which is required for ArgoCD and any other tool that renders with `helm template`.
 
 ```yaml
 # App secret: SECRET_PASSWORD (required), CRON_SECRET (required if
@@ -150,9 +150,5 @@ oidc:
 ## Housekeeping
 
 Rallly's hosted service runs four maintenance tasks on a schedule (auto-close polls, delete inactive polls, remove soft-deleted polls and users); a self-hosted install runs none of these unless something calls them. This chart ships them as CronJobs, **enabled by default**, matching rallly.co's own schedule (`housekeeping.tasks`). These tasks delete data — review the schedule and disable (`housekeeping.enabled: false`) if you'd rather run it manually or not at all.
-
-## Migrating from `kubernetes/`
-
-If you're moving from this repository's plain `kubernetes/` manifests: they lack object storage, SMTP authentication, and OIDC entirely, and pin a stale image/Postgres version. There is no automated migration path for existing data — back up your database (`pg_dump`) before switching, point `externalDatabase.url` at your existing Postgres instance (or dump/restore into the chart's bundled one), and set `garage.enabled=false` with `externalS3.*` if you already have working object storage, or accept that uploads made before this chart was introduced will need to be migrated into Garage separately.
 
 {{ template "chart.valuesSection" . }}
